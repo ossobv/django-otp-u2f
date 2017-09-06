@@ -11,7 +11,7 @@ env:
   - DJANGO_VERSION=">=1.11,<1.12"
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y libusb-1.0-0-dev
+  - sudo apt-get install -y libusb-1.0-0-dev libudev-dev
 install:
   - pip install Django$DJANGO_VERSION
   - pip install -r requirements-test.txt
