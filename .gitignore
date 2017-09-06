@@ -1,0 +1,5 @@
+*.pyc
+__pycache__
+/.idea
+/dist
+/django_otp_u2f.egg-info
