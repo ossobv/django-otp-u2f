@@ -66,7 +66,7 @@ class U2FDevice(Device):
         }
 
     def verify_token(self, token):
-        client_data = json.loads(websafe_decode(token['clientData']))
+        client_data = json.loads(websafe_decode(token['clientData']).decode())
         try:
             u2f_challenge = U2FChallenge.objects.get(challenge=client_data['challenge'], device=self)
         except U2FChallenge.DoesNotExist:

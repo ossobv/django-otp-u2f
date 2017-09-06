@@ -4,7 +4,7 @@ import tempfile
 from django.conf import settings
 
 from django.contrib.auth import get_user_model
-from django.test import LiveServerTestCase
+from django.test import TestCase
 
 import u2flib_host.soft
 import u2flib_host.u2f
@@ -12,7 +12,7 @@ import u2flib_host.u2f
 from django_otp_u2f import models
 
 
-class U2FDeviceTestCase(LiveServerTestCase):
+class U2FDeviceTestCase(TestCase):
     def test_enroll(self):
         user = get_user_model().objects.create()
         device, data_for_client = models.U2FDevice.enroll(user=user)
