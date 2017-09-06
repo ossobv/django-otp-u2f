@@ -8,7 +8,6 @@ from django.test import LiveServerTestCase
 
 import u2flib_host.soft
 import u2flib_host.u2f
-from u2flib_server.utils import websafe_decode
 
 from django_otp_u2f import models
 

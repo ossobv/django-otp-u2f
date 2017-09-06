@@ -39,7 +39,6 @@ class U2FDevice(Device):
     def bind(self, data):
         data['version'] = 'U2F_V2'
         device, cert = complete_registration(json.loads(self.enroll_challenge), data, [settings.OTP_U2F_APP_ID])
-        print(device, cert)
         self.version = device['version']
         self.public_key = device['publicKey']
         self.transports = json.dumps(device['transports'])
