@@ -53,10 +53,9 @@ class U2FDevice(Device):
         u2f_challenge.delete()
         return True
 
-    def save(self, force_insert=False, force_update=False, using=None,
-             update_fields=None):
+    def save(self, *args, **kwargs):
         self.confirmed = self.u2fkey_set.exists() if self.pk else False
-        super(U2FDevice, self).save(force_insert, force_update, using, update_fields)
+        super(U2FDevice, self).save(*args, **kwargs)
 
 
 class U2FKey(models.Model):
@@ -90,8 +89,8 @@ class U2FKey(models.Model):
                                   transports=json.dumps(device['transports']),
                                   key_handle=device['keyHandle'])
 
-    def delete(self, using=None, keep_parents=False):
-        super(U2FKey, self).delete(using, keep_parents)
+    def delete(self, *args, **kwargs):
+        super(U2FKey, self).delete(*args, **kwargs)
         self.device.save()
 
 
