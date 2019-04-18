@@ -48,5 +48,6 @@ if __name__ == '__main__':
         ],
         install_requires=[
             'django-otp',
+            'python-u2flib-server',
         ],
     )
