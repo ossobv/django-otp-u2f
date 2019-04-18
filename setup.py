@@ -16,7 +16,7 @@ if __name__ == '__main__':
         data_files=[
             ('share/doc/django-otp-u2f', ['README.md']),
         ],
-        packages=['django_otp_u2f'],
+        packages=['django_otp_u2f', 'django_otp_u2f.migrations'],
         package_data={},
         description='django-otp device implementation for U2F',
         long_description=readme,
