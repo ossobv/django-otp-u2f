@@ -95,7 +95,7 @@ class U2FKey(models.Model):
 
 
 class U2FChallenge(models.Model):
-    device = models.ForeignKey(U2FDevice)
+    device = models.ForeignKey(U2FDevice, on_delete=models.CASCADE)
     challenge = models.TextField(db_index=True)
     challenge_data = models.TextField()
 
