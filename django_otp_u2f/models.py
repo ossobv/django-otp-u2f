@@ -14,7 +14,7 @@ from u2flib_server.u2f import (begin_registration, begin_authentication,
 log = logging.getLogger(__name__)
 
 
-class U2FDevice(Device):
+class U2fDevice(Device):
     app_id = models.CharField(max_length=100)
     version = models.CharField(max_length=16)
     key_handle = models.TextField()
@@ -70,7 +70,7 @@ class U2FDevice(Device):
             try:
                 u2f_device = cls.objects.get(
                    user=user, key_handle=device['keyHandle'])
-            except U2FDevice.DoesNotExist:
+            except cls.DoesNotExist:
                 return False
             log.error(
                 'U2F appears to be cloned, expected counter > %d but got %d '
@@ -81,6 +81,7 @@ class U2FDevice(Device):
                     user=user, key_handle=device['keyHandle']
                     ).order_by('id')[1:]:
                 log.warning('Removing duplicate key %r', u2f_device)
+                u2f_device.delete()
         return True
 
     def as_device_registration(self):
