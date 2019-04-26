@@ -1,3 +1,4 @@
+from functools import partial
 import json
 import logging
 
@@ -22,6 +23,21 @@ class U2fDevice(Device):
     transports = models.TextField(default='[]')
     counter = models.IntegerField(default=0)
 
+    # django-otp api
+    def generate_challenge(self):
+        return U2fDevice.begin_authentication(self.user, self.app_id)
+
+    def create_verify_token(self, request):
+        self.verify_token = partial(self._verify_token, self.user, request)
+
+    def _verify_token(self, user, request, response):
+        response = json.loads(response)
+        return U2fDevice.complete_authentication(user, request, response)
+
+    def verify_token(self, token):
+        return False
+    # /django-otp api
+
     @classmethod
     def begin_registration(cls, user, app_id):
         """
@@ -29,10 +45,9 @@ class U2fDevice(Device):
 
         :return: request, data_for_client
         """
-        request = begin_registration(
+        return begin_registration(
             app_id, [key.as_device_registration()
                      for key in cls.objects.filter(user=user, confirmed=True)])
-        return request.json, request.data_for_client
 
     @classmethod
     def complete_registration(cls, user, request, response, name=None):
@@ -51,10 +66,9 @@ class U2fDevice(Device):
 
     @classmethod
     def begin_authentication(cls, user, app_id):
-        request = begin_authentication(
+        return begin_authentication(
             app_id, [key.as_device_registration()
                      for key in cls.objects.filter(user=user, confirmed=True)])
-        return request.json, request.data_for_client
 
     @classmethod
     def complete_authentication(cls, user, request, response):

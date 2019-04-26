@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os.path
-from distutils.core import setup
-
+from setuptools import find_packages, setup
 
 if __name__ == '__main__':
     here = os.path.dirname(__file__)
@@ -16,8 +15,7 @@ if __name__ == '__main__':
         data_files=[
             ('share/doc/django-otp-u2f', ['README.md']),
         ],
-        packages=['django_otp_u2f', 'django_otp_u2f.migrations'],
-        package_data={},
+        packages=find_packages(exclude=('tests',)),
         description='django-otp device implementation for U2F',
         long_description=readme,
         author='Harm Geerts',
