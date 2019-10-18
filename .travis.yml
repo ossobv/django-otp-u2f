@@ -15,6 +15,6 @@ install:
   - pip install Django$DJANGO_VERSION
   - pip install -r requirements-test.txt
   - pip install codecov
-script: PYTHONPATH=. DJANGO_SETTINGS_MODULE=django_otp_u2f.tests.settings coverage run --source=django_otp_u2f `which django-admin.py` test
+script: PYTHONPATH=. DJANGO_SETTINGS_MODULE=otp_u2f.tests.settings coverage run --source=otp_u2f `which django-admin.py` test
 after_success:
   - codecov

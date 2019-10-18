@@ -1,0 +1,74 @@
+{% extends "kleides_mfa/device_create_form.html" %}
+
+{% load i18n static %}
+
+{% block extra_js %}{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/u2f-api@1.1.1/bundle.js" integrity="sha384-AoIwmslcQv4e7yg/hzsZ1IzGaBFIKSMrVYH1Eb1+l189YBmi8KU3dsO5Jkf33evd" crossorigin="anonymous"></script>
+{{ form.data_for_client|json_script:"kleides-mfa-u2f-registration" }}
+<script type="text/javascript">
+jQuery(function ($) {
+    u2fApi.isSupported()
+    .then(function(supported) {
+        $('#u2f-support-warning').toggle(!supported);
+        if (supported) {
+            var registration = document.getElementById('kleides-mfa-u2f-registration');
+            if (registration) {
+                request = JSON.parse(registration.textContent);
+                return u2fApi.register(
+                    request.registerRequests,
+                    request.registeredKeys
+                )
+                .then(function (response) {
+                    var form = document.getElementById('kleides-mfa-form');
+                    form.otp_token.value = JSON.stringify(response);
+                    form.submit();
+                });
+            }
+        }
+    })
+    .catch(function (response) {
+        console.log('Error %o', arguments);
+        if (response.metaData.code == 4) {
+            return $('#u2f-already-registered').show();
+        } else if (response.metaData.code == 5) {
+            return $('#u2f-timeout').show();
+        } else {
+            return $('#u2f-registration-error').show();
+        }
+    });
+});
+</script>
+{% endblock extra_js %}
+
+{% block form_description %}
+<div id='u2f-registration-error' class='alert alert-danger' style='display: none;'>
+{% trans 'Unable to register U2F device. Reload the page to try again.' %}
+</div>
+<div id='u2f-timeout' class='alert alert-danger' style='display: none;'>
+{% trans 'Timeout while waiting for U2F response. Reload the page to try again.' %}
+</div>
+
+<div id='u2f-already-registered' class='alert alert-warning' style='display: none;'>
+{% trans 'This U2F device is already registered for this account.' %}
+</div>
+
+<div id='u2f-support-warning' style='display: none;'>
+<div class='alert alert-danger'>
+{% trans 'You must be using a compatible browser to use a U2F security key.' %}
+</div>
+<p>
+{% blocktrans %}
+The following browsers currently support the use of U2F security keys:
+<ul>
+<li>Google Chrome, version 38 and later.</li>
+<li>Opera, version 40 and later.</li>
+<li>Mozilla Firefox, version 57 and later.</li>
+</ul>
+{% endblocktrans %}
+</p>
+</div>
+
+<p>
+{% trans 'Connect your U2F device and press the button to add it to your account.' %}
+</p>
+{% endblock form_description %}

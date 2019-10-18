@@ -3,7 +3,7 @@ SECRET_KEY = 'test secret key'
 
 INSTALLED_APPS = [
     'django_otp',
-    'django_otp_u2f',
+    'otp_u2f',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',

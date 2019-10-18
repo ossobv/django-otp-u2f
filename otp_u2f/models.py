@@ -1,23 +1,24 @@
-from functools import partial
 import json
 import logging
 
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.x509 import NameOID
+from django.core.cache import cache
 from django.db import models
 from django_otp.models import Device
 
-from u2flib_server.model import DeviceRegistration
+from u2flib_server.model import DeviceRegistration, SignResponse
 from u2flib_server.u2f import (begin_registration, begin_authentication,
                                complete_registration, complete_authentication)
 
 log = logging.getLogger(__name__)
 
 
+U2F_REQUEST_TIMEOUT = 300
+
+
 class U2fDevice(Device):
     app_id = models.CharField(max_length=100)
     version = models.CharField(max_length=16)
+    certificate = models.TextField()
     key_handle = models.TextField()
     public_key = models.TextField()
     transports = models.TextField(default='[]')
@@ -25,17 +26,26 @@ class U2fDevice(Device):
 
     # django-otp api
     def generate_challenge(self):
-        return U2fDevice.begin_authentication(self.user, self.app_id)
-
-    def create_verify_token(self, request):
-        self.verify_token = partial(self._verify_token, self.user, request)
-
-    def _verify_token(self, user, request, response):
-        response = json.loads(response)
-        return U2fDevice.complete_authentication(user, request, response)
+        request = U2fDevice.begin_authentication(self.user, self.app_id)
+        cache.set(request.challenge, request, U2F_REQUEST_TIMEOUT)
+        return request.data_for_client
 
     def verify_token(self, token):
-        return False
+        '''
+        Warning, the django-otp api does not allow associating challenges with
+        a particular session. As a result anyone with the challenge is able to
+        authenticate with this device.
+        Because U2F is a hardware component this is an acceptable risk for most
+        use cases. If you really care about this you should not use the
+        django-otp api and authenticate to each specific device like django-otp
+        recommends.
+        '''
+        response = SignResponse.wrap(json.loads(token))
+        request = cache.get(response.clientData.challenge)
+        if request is None:
+            return False
+        cache.delete(response.clientData.challenge)
+        return U2fDevice.complete_authentication(self.user, request, response)
     # /django-otp api
 
     @classmethod
@@ -43,47 +53,51 @@ class U2fDevice(Device):
         """
         Start registering a U2F security key.
 
-        :return: request, data_for_client
+        :return: request
         """
         return begin_registration(
             app_id, [key.as_device_registration()
                      for key in cls.objects.filter(user=user, confirmed=True)])
 
     @classmethod
-    def complete_registration(cls, user, request, response, name=None):
-        response['version'] = 'U2F_V2'
-        device, cert = complete_registration(request, response)
-        if not name:
-            cert = x509.load_der_x509_certificate(cert, default_backend())
-            name = cert.subject.get_attributes_for_oid(
-                    NameOID.COMMON_NAME)[0].value
+    def complete_registration(cls, request, response):
+        """
+        Complete registering a U2F security key.
 
-        return cls.objects.create(
-            user=user, name=name, confirmed=True, app_id=device['appId'],
-            version=device['version'], key_handle=device['keyHandle'],
-            public_key=device['publicKey'],
-            transports=json.dumps(device['transports']))
+        :return: DeviceRegistration, certificate
+        """
+        response['version'] = 'U2F_V2'
+        return complete_registration(request, response)
 
     @classmethod
     def begin_authentication(cls, user, app_id):
+        """
+        Start authenticating a U2F security key.
+
+        :return: request
+        """
         return begin_authentication(
             app_id, [key.as_device_registration()
                      for key in cls.objects.filter(user=user, confirmed=True)])
 
     @classmethod
     def complete_authentication(cls, user, request, response):
+        """
+        Complete authenticating a U2F security key.
+
+        :return: boolean
+        """
         try:
             device, counter, _presence = complete_authentication(
                 request, response)
         except ValueError:
             return False
-        n = cls.objects.filter(
-            user=user, key_handle=device['keyHandle'], counter__lt=counter,
-            ).update(counter=counter)
+        queryset = cls.objects.filter(
+            user=user, key_handle=device['keyHandle'], confirmed=True)
+        n = queryset.filter(counter__lt=counter).update(counter=counter)
         if n == 0:
             try:
-                u2f_device = cls.objects.get(
-                   user=user, key_handle=device['keyHandle'])
+                u2f_device = queryset.get()
             except cls.DoesNotExist:
                 return False
             log.error(
@@ -91,9 +105,10 @@ class U2fDevice(Device):
                 'instead.', u2f_device.counter, counter)
             return False
         elif n > 1:
-            for u2f_device in cls.objects.filter(
-                    user=user, key_handle=device['keyHandle']
-                    ).order_by('id')[1:]:
+            # This should never happen because all the users keys are included
+            # in the registration and U2F does not allow registering the same
+            # key twice.
+            for u2f_device in queryset.order_by('id')[1:]:
                 log.warning('Removing duplicate key %r', u2f_device)
                 u2f_device.delete()
         return True
