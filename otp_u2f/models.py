@@ -1,9 +1,13 @@
 import json
 import logging
 
+from django.conf import settings
 from django.core.cache import cache
-from django.db import models
-from django_otp.models import Device
+from django.core.exceptions import SuspiciousOperation
+from django.db.models import CharField, F, IntegerField, TextField
+from django.utils import timezone
+
+from django_otp.models import Device, ThrottlingMixin
 
 from u2flib_server.model import DeviceRegistration, SignResponse
 from u2flib_server.u2f import (begin_registration, begin_authentication,
@@ -15,14 +19,18 @@ log = logging.getLogger(__name__)
 U2F_REQUEST_TIMEOUT = 300
 
 
-class U2fDevice(Device):
-    app_id = models.CharField(max_length=100)
-    version = models.CharField(max_length=16)
-    certificate = models.TextField()
-    key_handle = models.TextField()
-    public_key = models.TextField()
-    transports = models.TextField(default='[]')
-    counter = models.IntegerField(default=0)
+class U2fDeviceClonedError(SuspiciousOperation):
+    pass
+
+
+class U2fDevice(ThrottlingMixin, Device):
+    app_id = CharField(max_length=100)
+    version = CharField(max_length=16)
+    certificate = TextField()
+    key_handle = TextField()
+    public_key = TextField()
+    transports = TextField(default='[]')
+    counter = IntegerField(default=0)
 
     # django-otp api
     def generate_challenge(self):
@@ -36,17 +44,22 @@ class U2fDevice(Device):
         a particular session. As a result anyone with the challenge is able to
         authenticate with this device.
         Because U2F is a hardware component this is an acceptable risk for most
-        use cases. If you really care about this you should not use the
-        django-otp api and authenticate to each specific device like django-otp
-        recommends.
+        use cases. If you really care about this you should authenticate to
+        each specific device like django-otp recommends.
         '''
-        response = SignResponse.wrap(json.loads(token))
+        try:
+            response = SignResponse.wrap(json.loads(token))
+        except ValueError:
+            return False
         request = cache.get(response.clientData.challenge)
         if request is None:
             return False
         cache.delete(response.clientData.challenge)
         return U2fDevice.complete_authentication(self.user, request, response)
     # /django-otp api
+
+    def get_throttle_factor(self):
+        return getattr(settings, 'OTP_U2F_THROTTLE_FACTOR', 1)
 
     @classmethod
     def begin_registration(cls, user, app_id):
@@ -88,29 +101,52 @@ class U2fDevice(Device):
         :return: boolean
         """
         try:
-            device, counter, _presence = complete_authentication(
-                request, response)
+            response = SignResponse.wrap(response)
         except ValueError:
             return False
+
         queryset = cls.objects.filter(
-            user=user, key_handle=device['keyHandle'], confirmed=True)
-        n = queryset.filter(counter__lt=counter).update(counter=counter)
-        if n == 0:
-            try:
-                u2f_device = queryset.get()
-            except cls.DoesNotExist:
-                return False
-            log.error(
-                'U2F appears to be cloned, expected counter > %d but got %d '
-                'instead.', u2f_device.counter, counter)
+            user=user, key_handle=response['keyHandle'], confirmed=True)
+        try:
+            device = queryset.get()
+        except cls.DoesNotExist:
             return False
-        elif n > 1:
+        except cls.MultipleObjectsReturned:
             # This should never happen because all the users keys are included
-            # in the registration and U2F does not allow registering the same
-            # key twice.
-            for u2f_device in queryset.order_by('id')[1:]:
-                log.warning('Removing duplicate key %r', u2f_device)
-                u2f_device.delete()
+            # in the registration and the U2F client should not try to register
+            # the same key twice. (At least chrome doesn't)
+            for device in queryset.order_by('id')[1:]:
+                log.warning('Removing duplicate device %r', device)
+                device.delete()
+            device = queryset.get()
+
+        if not device.verify_is_allowed()[0]:
+            return False
+
+        try:
+            _device, counter, _presence = complete_authentication(
+                request, response)
+        except ValueError:
+            queryset.update(
+                throttling_failure_timestamp=timezone.now(),
+                throttling_failure_count=F('throttling_failure_count') + 1
+            )
+            return False
+
+        n = queryset.filter(counter__lt=counter).update(
+            throttling_failure_timestamp=None, throttling_failure_count=0,
+            counter=counter)
+        if n == 0:
+            queryset.update(
+                confirmed=False,
+                throttling_failure_timestamp=timezone.now(),
+                throttling_failure_count=F('throttling_failure_count') + 1,
+            )
+            raise U2fDeviceClonedError(
+                'U2F appears to be cloned, expected counter > {} but got {} '
+                'instead. The device {} has been disabled.'.format(
+                    device.counter, counter, device.persistent_id))
+
         return True
 
     def as_device_registration(self):
