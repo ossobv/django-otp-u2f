@@ -13,7 +13,8 @@ class OtpU2fConfig(AppConfig):
         if apps.is_installed('kleides_mfa'):
             from kleides_mfa.registry import registry
             from .models import U2fDevice
-            from .forms import U2fDeviceCreateForm
+            from .forms import U2fDeviceCreateForm, U2fVerifyForm
             registry.register(
                 'U2F', U2fDevice, create_form=U2fDeviceCreateForm,
-                show_create_button=False)
+                verify_form=U2fVerifyForm, show_create_button=False,
+                show_verify_button=False)

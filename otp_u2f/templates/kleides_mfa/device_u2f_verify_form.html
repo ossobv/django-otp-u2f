@@ -1,4 +1,4 @@
-{% extends "kleides_mfa/device_create_form.html" %}
+{% extends "kleides_mfa/device_verify_form.html" %}
 
 {% load i18n static %}
 
@@ -14,12 +14,11 @@ jQuery(function ($) {
             var challenge = document.getElementById('kleides-mfa-u2f-challenge');
             if (challenge) {
                 challenge = JSON.parse(challenge.textContent);
-                return u2fApi.register(
-                    challenge.registerRequests,
+                return u2fApi.sign(
                     challenge.registeredKeys
                 )
                 .then(function (response) {
-                    var form = document.getElementById('kleides-mfa-form');
+                    var form = document.getElementById('kleides-mfa-verify-form');
                     form.otp_token.value = JSON.stringify(response);
                     form.submit();
                 });
@@ -29,7 +28,7 @@ jQuery(function ($) {
     .catch(function (response) {
         console.log('Error %o', arguments);
         if (response.metaData.code == 4) {
-            return $('#u2f-already-registered').show();
+            return $('#u2f-not-registered').show();
         } else if (response.metaData.code == 5) {
             return $('#u2f-timeout').show();
         } else {
@@ -41,15 +40,14 @@ jQuery(function ($) {
 {% endblock extra_js %}
 
 {% block form_description %}
-<div id='u2f-registration-error' class='alert alert-danger' style='display: none;'>
+<div id='u2f-authentication-error' class='alert alert-danger' style='display: none;'>
 {% trans 'Unable to register U2F device. Reload the page to try again.' %}
 </div>
 <div id='u2f-timeout' class='alert alert-danger' style='display: none;'>
 {% trans 'Timeout while waiting for U2F response. Reload the page to try again.' %}
 </div>
-
-<div id='u2f-already-registered' class='alert alert-warning' style='display: none;'>
-{% trans 'This U2F device is already registered for this account.' %}
+<div id='u2f-not-registered' class='alert alert-danger' style='display: none;'>
+{% trans 'This U2F device is not registered for this account.' %}
 </div>
 
 <div id='u2f-support-warning' style='display: none;'>
@@ -69,6 +67,6 @@ The following browsers currently support the use of U2F security keys:
 </div>
 
 <p>
-{% trans 'Connect your U2F device and press the button to add it to your account.' %}
+{% trans 'Connect your U2F device and press the button to verify access to this account.' %}
 </p>
 {% endblock form_description %}
