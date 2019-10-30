@@ -15,6 +15,6 @@ class OtpU2fConfig(AppConfig):
             from .models import U2fDevice
             from .forms import U2fDeviceCreateForm, U2fVerifyForm
             registry.register(
-                'U2F', U2fDevice, create_form=U2fDeviceCreateForm,
-                verify_form=U2fVerifyForm, show_create_button=False,
+                'U2F', U2fDevice, create_form_class=U2fDeviceCreateForm,
+                verify_form_class=U2fVerifyForm, show_create_button=False,
                 show_verify_button=False)
