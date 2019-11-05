@@ -10,7 +10,7 @@ class OtpU2fConfig(AppConfig):
 
     def ready(self):
         # Check if known devices are installed and register them as plugins.
-        if apps.is_installed('kleides_mfa'):
+        if apps.is_installed('kleides_mfa'):  # pragma: no branch
             from kleides_mfa.registry import registry
             from .models import U2fDevice
             from .forms import U2fDeviceCreateForm, U2fVerifyForm

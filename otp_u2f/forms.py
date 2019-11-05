@@ -49,6 +49,9 @@ class U2fDeviceCreateForm(DeviceCreateForm):
         except Exception:
             raise forms.ValidationError(
                 _('The U2F key could not be verified.'))
+        finally:
+            if U2F_REGISTRATION_KEY in self.request.session:  # noqa: E501; pragma: no cover
+                del self.request.session[U2F_REGISTRATION_KEY]
 
         self.instance.app_id = device['appId']
         self.instance.version = device['version']
@@ -66,16 +69,9 @@ class U2fDeviceCreateForm(DeviceCreateForm):
                 self.cleaned_data['name'] = (
                     cert.subject.get_attributes_for_oid(
                         NameOID.COMMON_NAME)[0].value)
-            except Exception:
+            except Exception:  # pragma: no cover
                 pass
         return self.cleaned_data
-
-    def save(self, *args, **kwargs):
-        try:
-            return super().save(*args, **kwargs)
-        finally:
-            if U2F_REGISTRATION_KEY in self.request.session:
-                del self.request.session[U2F_REGISTRATION_KEY]
 
     class Meta:
         model = U2fDevice
@@ -116,7 +112,7 @@ class U2fVerifyForm(BaseVerifyForm):
         except Exception:
             verified = False
         finally:
-            if U2F_AUTHENTICATION_KEY in self.request.session:
+            if U2F_AUTHENTICATION_KEY in self.request.session:  # noqa: E501; pragma: no cover
                 del self.request.session[U2F_AUTHENTICATION_KEY]
 
         if not verified:

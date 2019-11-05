@@ -2,19 +2,19 @@
 import os.path
 from setuptools import find_packages, setup
 
-with open('README.md') as fp:
-    readme = fp.read()
+with open('README.rst') as readme_file:
+    readme = readme_file.read()
+
+with open('HISTORY.rst') as history_file:
+    history = history_file.read()
 
 setup(
     name='django-otp-u2f',
     version='0.1.0',
-    data_files=[
-        ('share/doc/django-otp-u2f', ['README.md']),
-    ],
     packages=find_packages(exclude=('tests',)),
     include_package_data=True,
     description='django-otp device implementation for U2F',
-    long_description=readme,
+    long_description=readme + '\n\n' + history,
     author='Harm Geerts',
     author_email='hgeerts@osso.nl',
     python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*',
@@ -41,9 +41,6 @@ setup(
     install_requires=[
         'django-otp',
         'python-u2flib-server',
-    ],
-    test_require=[
-        'python-u2flib-host',
     ],
     license="GNU General Public License v3",
 )
