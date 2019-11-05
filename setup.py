@@ -10,7 +10,7 @@ with open('HISTORY.rst') as history_file:
 
 setup(
     name='django-otp-u2f',
-    version='0.1.0',
+    version='0.1.1',
     packages=find_packages(exclude=('tests',)),
     include_package_data=True,
     description='django-otp device implementation for U2F',
