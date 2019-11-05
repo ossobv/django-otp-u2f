@@ -4,7 +4,7 @@ import logging
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import SuspiciousOperation
-from django.db.models import CharField, F, IntegerField, TextField
+from django.db.models import CharField, F, PositiveIntegerField, TextField
 from django.utils import timezone
 
 from django_otp.models import Device, ThrottlingMixin
@@ -30,12 +30,12 @@ class U2fDevice(ThrottlingMixin, Device):
     key_handle = TextField()
     public_key = TextField()
     transports = TextField(default='[]')
-    counter = IntegerField(default=0)
+    counter = PositiveIntegerField(default=0)
 
     # django-otp api
     def generate_challenge(self):
         request = U2fDevice.begin_authentication(self.user, self.app_id)
-        cache.set(request.challenge, request, U2F_REQUEST_TIMEOUT)
+        cache.set(request['challenge'], request, U2F_REQUEST_TIMEOUT)
         return request.data_for_client
 
     def verify_token(self, token):
@@ -51,10 +51,10 @@ class U2fDevice(ThrottlingMixin, Device):
             response = SignResponse.wrap(json.loads(token))
         except ValueError:
             return False
-        request = cache.get(response.clientData.challenge)
+        request = cache.get(response.clientData['challenge'])
         if request is None:
             return False
-        cache.delete(response.clientData.challenge)
+        cache.delete(response.clientData['challenge'])
         return U2fDevice.complete_authentication(self.user, request, response)
     # /django-otp api
 
