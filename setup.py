@@ -37,8 +37,11 @@ setup(
          'Authentication/Directory'),
     ],
     install_requires=[
-        'django-otp',
-        'python-u2flib-server',
+        'django-otp>=0.7.0',
+        'python-u2flib-server>=5.0.0',
     ],
+    extras_require={
+        'kleides-mfa': ['kleides-mfa>=0.1.7'],
+    },
     license="GNU General Public License v3",
 )
