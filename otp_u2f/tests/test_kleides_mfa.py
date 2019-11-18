@@ -11,6 +11,7 @@ from u2flib_host import u2f
 from u2flib_host.soft import SoftU2FDevice
 
 from otp_u2f.forms import U2fDeviceCreateForm, U2fVerifyForm
+from otp_u2f.models import U2fDevice
 
 from .factories import UserFactory
 
@@ -29,6 +30,12 @@ class KleidesMfaTestCase(TestCase):
         plugin = registry.get_plugin('u2f')
         self.assertEqual(plugin.get_create_form_class(), U2fDeviceCreateForm)
         self.assertEqual(plugin.get_verify_form_class(), U2fVerifyForm)
+
+        user = UserFactory()
+        # When a user logs in the OTP device is added as a property.
+        user.otp_device = U2fDevice.objects.create(user=user)
+        self.assertEqual(
+            registry.user_authentication_method(user), 'u2f')
 
     def test_create_form_failure(self):
         form_kwargs = self.get_form_kwargs()

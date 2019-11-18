@@ -6,6 +6,7 @@ History
 ------------------
 
 * Update minimum dependencies.
+* Add test for current authentication method.
 
 
 0.1.2 (2019-11-07)
