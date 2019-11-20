@@ -94,7 +94,7 @@ class U2fDevice(ThrottlingMixin, Device):
                      for key in cls.objects.filter(user=user, confirmed=True)])
 
     @classmethod
-    def complete_authentication(cls, user, request, response):
+    def complete_authentication(cls, user, request, response):  # noqa: C901
         """
         Complete authenticating a U2F security key.
 

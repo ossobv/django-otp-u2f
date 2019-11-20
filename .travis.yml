@@ -1,20 +1,15 @@
 language: python
 python:
-  - "2.7"
-  - "3.4"
   - "3.5"
   - "3.6"
-env:
-  - DJANGO_VERSION=">=1.8,<1.9"
-  - DJANGO_VERSION=">=1.10,<1.11"
-  - DJANGO_VERSION=">=1.11,<1.12"
+  - "3.7"
+  - "3.8"
+matrix:
+  include:
+    - python: "3.8"
+      env: TOXENV=flake8
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -y libusb-1.0-0-dev libudev-dev
-install:
-  - pip install Django$DJANGO_VERSION
-  - pip install -r requirements-test.txt
-  - pip install codecov
-script: PYTHONPATH=. DJANGO_SETTINGS_MODULE=otp_u2f.tests.settings coverage run --source=otp_u2f `which django-admin.py` test
-after_success:
-  - codecov
+install: pip install tox-travis
+script: tox
