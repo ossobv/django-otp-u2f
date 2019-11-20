@@ -1,4 +1,4 @@
-Welcome to Kleides Multi Factor Authentication's documentation!
+Welcome to Django OTP U2F's documentation!
 ======================================
 
 .. toctree::
