@@ -26,7 +26,7 @@ jQuery(function ($) {
         }
     })
     .catch(function (response) {
-        console.log('Error %o', arguments);
+        console.log('Error %o', response);
         if (response.metaData.code == 4) {
             return $('#u2f-not-registered').show();
         } else if (response.metaData.code == 5) {
