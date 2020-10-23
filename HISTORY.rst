@@ -2,6 +2,13 @@
 History
 =======
 
+0.1.4 (2020-10-23)
+------------------
+
+* Fix deprecation warnings in preparation of Django 4.
+* Fix javascript logging call.
+
+
 0.1.3 (2019-11-07)
 ------------------
 
@@ -15,6 +22,7 @@ History
 * Use package setup whilelist.
 * Add original author.
 * Remove python 2 classifiers.
+
 
 0.1.1 (2019-11-05)
 ------------------
