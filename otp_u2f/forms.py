@@ -6,7 +6,7 @@ import json
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509 import NameOID, load_der_x509_certificate
 from django import forms
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from kleides_mfa.forms import BaseVerifyForm, DeviceCreateForm
 from u2flib_server.model import U2fRegisterRequest, U2fSignRequest
