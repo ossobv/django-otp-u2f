@@ -11,6 +11,8 @@ matrix:
       env: TOXENV=flake8
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y libusb-1.0-0-dev libudev-dev rustc
+  - sudo apt-get install -y libusb-1.0-0-dev libudev-dev
+  # For python <=3.6 the cffi build requires rust/cargo.
+  - sudo apt-get install -y cargo rustc
 install: pip install tox-travis
 script: tox
