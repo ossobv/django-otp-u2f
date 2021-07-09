@@ -1,5 +1,5 @@
 Welcome to Django OTP U2F's documentation!
-======================================
+==========================================
 
 .. toctree::
    :maxdepth: 2
