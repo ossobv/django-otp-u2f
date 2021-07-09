@@ -11,6 +11,6 @@ matrix:
       env: TOXENV=flake8
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y libusb-1.0-0-dev libudev-dev
+  - sudo apt-get install -y libusb-1.0-0-dev libudev-dev rustc
 install: pip install tox-travis
 script: tox
