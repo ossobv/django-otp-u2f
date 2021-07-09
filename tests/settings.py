@@ -1,4 +1,7 @@
 DEBUG = False
+
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
 SECRET_KEY = 'test secret key'
 
 INSTALLED_APPS = [

@@ -55,7 +55,9 @@ class U2fDevice(ThrottlingMixin, Device):
         if request is None:
             return False
         cache.delete(response.clientData['challenge'])
-        return U2fDevice.complete_authentication(self.user, request, response)
+        device, verified = U2fDevice.complete_authentication(
+            self.user, request, response)
+        return verified
     # /django-otp api
 
     def get_throttle_factor(self):
@@ -98,19 +100,19 @@ class U2fDevice(ThrottlingMixin, Device):
         """
         Complete authenticating a U2F security key.
 
-        :return: boolean
+        :return: Device, boolean
         """
         try:
             response = SignResponse.wrap(response)
         except ValueError:
-            return False
+            return None, False
 
         queryset = cls.objects.filter(
             user=user, key_handle=response['keyHandle'], confirmed=True)
         try:
             device = queryset.get()
         except cls.DoesNotExist:
-            return False
+            return None, False
         except cls.MultipleObjectsReturned:
             # This should never happen because all the users keys are included
             # in the registration and the U2F client should not try to register
@@ -121,7 +123,7 @@ class U2fDevice(ThrottlingMixin, Device):
             device = queryset.get()
 
         if not device.verify_is_allowed()[0]:
-            return False
+            return device, False
 
         try:
             _device, counter, _presence = complete_authentication(
@@ -131,7 +133,7 @@ class U2fDevice(ThrottlingMixin, Device):
                 throttling_failure_timestamp=timezone.now(),
                 throttling_failure_count=F('throttling_failure_count') + 1
             )
-            return False
+            return device, False
 
         n = queryset.filter(counter__lt=counter).update(
             throttling_failure_timestamp=None, throttling_failure_count=0,
@@ -147,7 +149,7 @@ class U2fDevice(ThrottlingMixin, Device):
                 'instead. The device {} has been disabled.'.format(
                     device.counter, counter, device.persistent_id))
 
-        return True
+        return device, True
 
     def as_device_registration(self):
         return DeviceRegistration(

@@ -1,3 +1,8 @@
 django-otp
 python-u2flib-host
 python-u2flib-server
+coverage
+factory-boy
+pytest
+pytest-cov
+pytest-django

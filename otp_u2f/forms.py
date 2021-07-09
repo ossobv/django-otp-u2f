@@ -106,7 +106,9 @@ class U2fVerifyForm(BaseVerifyForm):
     def clean(self):
         self.cleaned_data = super().clean()
         try:
-            verified = U2fDevice.complete_authentication(
+            # Verification can be initiated on any of the users U2F devices
+            # but for the auditing we need to register the used device.
+            self.device, verified = U2fDevice.complete_authentication(
                 self.unverified_user, self._challenge,
                 json.loads(self.cleaned_data['otp_token']))
         except Exception:
