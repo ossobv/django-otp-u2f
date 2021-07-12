@@ -12,6 +12,8 @@ matrix:
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -y libusb-1.0-0-dev libudev-dev
+  - sudo pip install -U pip setuptools
+  - pip --version
   # For python <=3.6 the cffi build requires rust/cargo.
   - sudo apt-get install -y cargo rustc
 install: pip install tox-travis
