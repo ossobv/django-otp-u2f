@@ -3,39 +3,47 @@
 {% load i18n static %}
 
 {% block extra_js %}{{ block.super }}
-<script src="https://cdn.jsdelivr.net/npm/u2f-api@1.1.1/bundle.js" integrity="sha384-AoIwmslcQv4e7yg/hzsZ1IzGaBFIKSMrVYH1Eb1+l189YBmi8KU3dsO5Jkf33evd" crossorigin="anonymous"></script>
-{{ form.data_for_client|json_script:"kleides-mfa-u2f-challenge" }}
+<script src="{% static 'js/base64url-arraybuffer.js' %}"></script>
+<script src="{% static 'js/cbor.js' %}"></script>
 <script type="text/javascript">
 jQuery(function ($) {
-    u2fApi.isSupported()
-    .then(function(supported) {
-        $('#u2f-support-warning').toggle(!supported);
-        if (supported) {
-            var challenge = document.getElementById('kleides-mfa-u2f-challenge');
-            if (challenge) {
-                challenge = JSON.parse(challenge.textContent);
-                return u2fApi.register(
-                    challenge.registerRequests,
-                    challenge.registeredKeys
-                )
-                .then(function (response) {
-                    var form = document.getElementById('kleides-mfa-form');
-                    form.otp_token.value = JSON.stringify(response);
-                    form.submit();
-                });
-            }
-        }
-    })
-    .catch(function (response) {
-        console.log('Error %o', arguments);
-        if (response.metaData.code == 4) {
-            return $('#u2f-already-registered').show();
-        } else if (response.metaData.code == 5) {
-            return $('#u2f-timeout').show();
-        } else {
-            return $('#u2f-registration-error').show();
-        }
-    });
+    var try_again_button = $('<button class="btn btn-primary" type="button"/>')
+        .text('{{ _('Try again')|escapejs }}')
+        .on('click', register_start)
+        .wrap('<div/>');
+    try_again_button.parent().appendTo('#kleides-mfa-form');
+
+    function register_start() {
+        try_again_button.hide();
+        fetch('{% url "otp_u2f:register" %}', {
+            method: 'POST',
+            headers: {'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()}
+        }).then(function (response) {
+            if (response.ok) return response.text();
+            throw new Error('Failed to get registration challenge');
+        }).then(B64_AB.decode).then(CBOR.decode).then(function (options) {
+            return navigator.credentials.create(options);
+        }).then(function (attestation) {
+            var form = document.getElementById('kleides-mfa-form');
+            form.otp_token.value = B64_AB.encode(CBOR.encode({
+              'attestationObject': new Uint8Array(attestation.response.attestationObject),
+              'clientDataJSON': new Uint8Array(attestation.response.clientDataJSON)
+            }));
+            form.submit();
+        }).catch(function (error) {
+            $('#u2f-registration-error').show();
+            try_again_button.show();
+            console.debug(error);
+        });
+    }
+
+    if (!window.PublicKeyCredential) {
+        $('#u2f-support-warning').toggle(true);
+    } else if ($('#kleides-mfa-form').find('.alert').length > 0) {
+        try_again_button.show();
+    } else {
+        register_start();
+    }
 });
 </script>
 {% endblock extra_js %}
@@ -58,11 +66,13 @@ jQuery(function ($) {
 </div>
 <p>
 {% blocktrans %}
-The following browsers currently support the use of U2F security keys:
+The following browsers currently support the use of web authentication security keys:
 <ul>
-<li>Google Chrome, version 38 and later.</li>
-<li>Opera, version 40 and later.</li>
-<li>Mozilla Firefox, version 57 and later.</li>
+<li>Firefox, version 60 and later.</li>
+<li>Chrome, version 67 and later.</li>
+<li>Edge, version 18 and later.</li>
+<li>Opera, version 54 and later.</li>
+<li>Safari, version 13 and later.</li>
 </ul>
 {% endblocktrans %}
 </p>

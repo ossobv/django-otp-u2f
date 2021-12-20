@@ -3,45 +3,55 @@
 {% load i18n static %}
 
 {% block extra_js %}{{ block.super }}
-<script src="https://cdn.jsdelivr.net/npm/u2f-api@1.1.1/bundle.js" integrity="sha384-AoIwmslcQv4e7yg/hzsZ1IzGaBFIKSMrVYH1Eb1+l189YBmi8KU3dsO5Jkf33evd" crossorigin="anonymous"></script>
-{{ form.data_for_client|json_script:"kleides-mfa-u2f-challenge" }}
+<script src="{% static 'js/base64url-arraybuffer.js' %}"></script>
+<script src="{% static 'js/cbor.js' %}"></script>
 <script type="text/javascript">
 jQuery(function ($) {
-    u2fApi.isSupported()
-    .then(function(supported) {
-        $('#u2f-support-warning').toggle(!supported);
-        if (supported) {
-            var challenge = document.getElementById('kleides-mfa-u2f-challenge');
-            if (challenge) {
-                challenge = JSON.parse(challenge.textContent);
-                return u2fApi.sign(
-                    challenge.registeredKeys
-                )
-                .then(function (response) {
-                    var form = document.getElementById('kleides-mfa-verify-form');
-                    form.otp_token.value = JSON.stringify(response);
-                    form.submit();
-                });
-            }
-        }
-    })
-    .catch(function (response) {
-        console.log('Error %o', response);
-        if (response.metaData.code == 4) {
-            return $('#u2f-not-registered').show();
-        } else if (response.metaData.code == 5) {
-            return $('#u2f-timeout').show();
-        } else {
-            return $('#u2f-registration-error').show();
-        }
-    });
+    var try_again_button = $('<button class="btn btn-primary" type="button"/>')
+        .text('{{ _('Try again')|escapejs }}')
+        .on('click', authenticate_start)
+        .insertAfter('#kleides-mfa-alternate-methods');
+
+    function authenticate_start() {
+        try_again_button.hide();
+        fetch('{% url "otp_u2f:authenticate" %}', {
+            method: 'POST',
+            headers: {'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()}
+        }).then(function (response) {
+            if (response.ok) return response.text();
+            throw new Error('Failed to get authentication challenge');
+        }).then(B64_AB.decode).then(CBOR.decode).then(function (options) {
+            return navigator.credentials.get(options);
+        }).then(function(assertion) {
+            var form = document.getElementById('kleides-mfa-verify-form');
+            form.otp_token.value = B64_AB.encode(CBOR.encode({
+              'credentialId': new Uint8Array(assertion.rawId),
+              'authenticatorData': new Uint8Array(assertion.response.authenticatorData),
+              'clientDataJSON': new Uint8Array(assertion.response.clientDataJSON),
+              'signature': new Uint8Array(assertion.response.signature)
+            }))
+            form.submit();
+        }).catch(function (error) {
+            $('#u2f-authentication-error').show();
+            try_again_button.show();
+            console.debug(error);
+        });
+    }
+
+    if (!window.PublicKeyCredential) {
+        $('#u2f-support-warning').show();
+    } else if ($('#kleides-mfa-verify-form').find('.alert').length > 0) {
+        try_again_button.show();
+    } else {
+        authenticate_start();
+    }
 });
 </script>
 {% endblock extra_js %}
 
 {% block form_description %}
 <div id='u2f-authentication-error' class='alert alert-danger' style='display: none;'>
-{% trans 'Unable to register U2F device. Reload the page to try again.' %}
+{% trans 'Unable to authenticate U2F device. Reload the page to try again.' %}
 </div>
 <div id='u2f-timeout' class='alert alert-danger' style='display: none;'>
 {% trans 'Timeout while waiting for U2F response. Reload the page to try again.' %}
@@ -56,11 +66,13 @@ jQuery(function ($) {
 </div>
 <p>
 {% blocktrans %}
-The following browsers currently support the use of U2F security keys:
+The following browsers currently support the use of web authentication security keys:
 <ul>
-<li>Google Chrome, version 38 and later.</li>
-<li>Opera, version 40 and later.</li>
-<li>Mozilla Firefox, version 57 and later.</li>
+<li>Firefox, version 60 and later.</li>
+<li>Chrome, version 67 and later.</li>
+<li>Edge, version 18 and later.</li>
+<li>Opera, version 54 and later.</li>
+<li>Safari, version 13 and later.</li>
 </ul>
 {% endblocktrans %}
 </p>

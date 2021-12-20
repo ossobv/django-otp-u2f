@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, unicode_literals
 
-import json
+from base64 import urlsafe_b64encode
+from uuid import UUID
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.x509 import NameOID, load_der_x509_certificate
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
 from kleides_mfa.forms import BaseVerifyForm, DeviceCreateForm
-from u2flib_server.model import U2fRegisterRequest, U2fSignRequest
 
-from .models import U2fDevice
+from .models import U2fDeviceClonedError, U2fDevice
+from .utils import Webauthn
 
 U2F_AUTHENTICATION_KEY = 'kleides-mfa-u2f-authentication-key'
 U2F_REGISTRATION_KEY = 'kleides-mfa-u2f-registration-key'
@@ -22,56 +21,44 @@ class U2fDeviceCreateForm(DeviceCreateForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._challenge = self._get_u2f_challenge()
-
-    def _get_u2f_challenge(self):
-        # Store the U2F challenge in the session, rotate it on unbound forms.
-        if self.is_bound and U2F_REGISTRATION_KEY in self.request.session:
-            challenge = self.request.session[U2F_REGISTRATION_KEY]
-        else:
-            challenge = U2fDevice.begin_registration(
-                self.request.user, self.request.build_absolute_uri('/')[:-1])
-            self.request.session[U2F_REGISTRATION_KEY] = challenge
-        return U2fRegisterRequest.wrap(challenge)
-
-    def data_for_client(self):
-        # Client library expects appId in the registerRequest...
-        data = self._challenge.data_for_client
-        for request in data['registerRequests']:
-            request['appId'] = data['appId']
-        return data
+        self._webauthn = Webauthn(self.request)
+        self._state = self.request.session.pop(U2F_REGISTRATION_KEY, None)
 
     def clean(self):
-        self.cleaned_data = super().clean()
+        super().clean()
+
+        data = self.clean_input()
         try:
-            device, certificate = U2fDevice.complete_registration(
-                self._challenge, json.loads(self.cleaned_data['otp_token']))
-        except Exception:
+            authenticator_data = self._webauthn.register_complete(
+                self._state, data)
+        except Exception as e:
             raise forms.ValidationError(
-                _('The U2F key could not be verified.'))
+                _('The U2F key could not be verified. (reason: {})').format(e))
         finally:
             if U2F_REGISTRATION_KEY in self.request.session:  # noqa: E501; pragma: no cover
                 del self.request.session[U2F_REGISTRATION_KEY]
 
-        self.instance.app_id = device['appId']
-        self.instance.version = device['version']
-        self.instance.certificate = certificate
-        self.instance.key_handle = device['keyHandle']
-        self.instance.public_key = device['publicKey']
-        self.instance.transports = json.dumps(device['transports'])
+        credential_data = authenticator_data.credential_data
+        self.instance.rp_id = self._webauthn.rp_id
+        self.instance.version = 'webauthn'
+        self.instance.aaguid = UUID(bytes=credential_data.aaguid)
+        self.instance.credential = urlsafe_b64encode(
+            credential_data.credential_id).decode()
+        self.instance.public_key = self._webauthn.encode(
+            credential_data.public_key)
+        self.instance.counter = authenticator_data.counter
 
-        # Replace name if it has not changed from the initial value with the
-        # name from the certificate which may include a better identifier.
-        if 'name' not in self.changed_data:
-            try:
-                cert = load_der_x509_certificate(
-                    certificate, default_backend())
-                self.cleaned_data['name'] = (
-                    cert.subject.get_attributes_for_oid(
-                        NameOID.COMMON_NAME)[0].value)
-            except Exception:  # pragma: no cover
-                pass
-        return self.cleaned_data
+    def clean_input(self):
+        if self._state is None:
+            raise forms.ValidationError(
+                _('The registration request has expired, try again.'))
+
+        try:
+            return self._webauthn.decode(
+                self.cleaned_data['otp_token'] + '===')
+        except (KeyError, TypeError, ValueError):
+            raise forms.ValidationError(
+                _('The registration request is invalid'))
 
     class Meta:
         model = U2fDevice
@@ -83,41 +70,47 @@ class U2fVerifyForm(BaseVerifyForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._challenge = self._get_u2f_challenge()
-
-    def _get_u2f_challenge(self):
-        # Store the U2F challenge in the session, rotate it on unbound forms.
-        if self.is_bound and U2F_AUTHENTICATION_KEY in self.request.session:
-            challenge = self.request.session[U2F_AUTHENTICATION_KEY]
-        else:
-            challenge = U2fDevice.begin_authentication(
-                self.unverified_user,
-                self.request.build_absolute_uri('/')[:-1])
-            self.request.session[U2F_AUTHENTICATION_KEY] = challenge
-        return U2fSignRequest.wrap(challenge)
-
-    def data_for_client(self):
-        # Client library expects challenge in the registeredKeys...
-        data = self._challenge.data_for_client
-        for key in data['registeredKeys']:
-            key['challenge'] = data['challenge']
-        return data
+        self._webauthn = Webauthn(self.request)
+        self._state = self.request.session.pop(U2F_AUTHENTICATION_KEY, None)
 
     def clean(self):
-        self.cleaned_data = super().clean()
-        try:
-            # Verification can be initiated on any of the users U2F devices
-            # but for the auditing we need to register the used device.
-            self.device, verified = U2fDevice.complete_authentication(
-                self.unverified_user, self._challenge,
-                json.loads(self.cleaned_data['otp_token']))
-        except Exception:
-            verified = False
-        finally:
-            if U2F_AUTHENTICATION_KEY in self.request.session:  # noqa: E501; pragma: no cover
-                del self.request.session[U2F_AUTHENTICATION_KEY]
+        super().clean()
 
-        if not verified:
+        data = self.clean_input()
+        self.device = self.clean_device(data)
+
+        try:
+            credential, authenticator = self._webauthn.authenticate_complete(
+                self._state, data, self.unverified_user)
+        except ValueError:
+            self.device.increment_failure_counter()
+            raise forms.ValidationError(_('Device verification failure'))
+
+        try:
+            self.device.update_usage_counter(authenticator.counter)
+        except U2fDeviceClonedError:
+            raise forms.ValidationError(_('Device verification failure'))
+
+    def clean_input(self):
+        if self._state is None:
             raise forms.ValidationError(
-                _('The U2F key could not be verified.'))
-        return self.cleaned_data
+                _('The authentication request has expired, try again.'))
+
+        try:
+            return self._webauthn.decode(
+                self.cleaned_data['otp_token'] + '===')
+        except (KeyError, TypeError, ValueError):
+            raise forms.ValidationError(
+                _('The authentication request is invalid'))
+
+    def clean_device(self, data):
+        try:
+            device = U2fDevice.get_device(
+                self.unverified_user, data['credentialId'])
+        except (KeyError, U2fDevice.DoesNotExist):
+            raise forms.ValidationError(_('The device is not available'))
+
+        if not device.verify_is_allowed()[0]:
+            raise forms.ValidationError(_('The device is not available'))
+
+        return device

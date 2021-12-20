@@ -1,17 +1,18 @@
-import json
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from functools import cached_property
 import logging
 
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import SuspiciousOperation
-from django.db.models import CharField, F, PositiveIntegerField, TextField
+from django.db.models import (
+    CharField, F, PositiveIntegerField, TextField, UUIDField)
 from django.utils import timezone
 
 from django_otp.models import Device, ThrottlingMixin
 
-from u2flib_server.model import DeviceRegistration, SignResponse
-from u2flib_server.u2f import (begin_registration, begin_authentication,
-                               complete_registration, complete_authentication)
+from fido2 import cbor
+from fido2.ctap2 import AttestedCredentialData
 
 log = logging.getLogger(__name__)
 
@@ -24,19 +25,20 @@ class U2fDeviceClonedError(SuspiciousOperation):
 
 
 class U2fDevice(ThrottlingMixin, Device):
-    app_id = CharField(max_length=100)
+    rp_id = CharField(max_length=100)
     version = CharField(max_length=16)
-    certificate = TextField()
-    key_handle = TextField()
+    aaguid = UUIDField()
+    credential = TextField()
     public_key = TextField()
-    transports = TextField(default='[]')
     counter = PositiveIntegerField(default=0)
 
     # django-otp api
     def generate_challenge(self):
-        request = U2fDevice.begin_authentication(self.user, self.app_id)
-        cache.set(request['challenge'], request, U2F_REQUEST_TIMEOUT)
-        return request.data_for_client
+        from .utils import Webauthn
+        webauthn = Webauthn()
+        request, state = webauthn.authenticate_begin(self.user)
+        cache.set(state['challenge'], state, U2F_REQUEST_TIMEOUT)
+        return request
 
     def verify_token(self, token):
         '''
@@ -48,93 +50,67 @@ class U2fDevice(ThrottlingMixin, Device):
         each specific device like django-otp recommends.
         '''
         try:
-            response = SignResponse.wrap(json.loads(token))
-        except ValueError:
+            response = self.webauthn.decode(token)
+        except (TypeError, ValueError):
             return False
-        request = cache.get(response.clientData['challenge'])
-        if request is None:
+
+        try:
+            state = cache.get(response['clientData']['challenge'])
+            if state is None:
+                return False
+            cache.delete(response['clientData']['challenge'])
+            if self.credential != urlsafe_b64encode(
+                    response['credentialId']).decode():
+                # Using a different device.
+                return False
+        except KeyError:
             return False
-        cache.delete(response.clientData['challenge'])
-        device, verified = U2fDevice.complete_authentication(
-            self.user, request, response)
-        return verified
+
+        return self.verify_webauthn(state, response)
     # /django-otp api
+
+    @cached_property
+    def webauthn(self):
+        from .utils import Webauthn
+        return Webauthn()
+
+    def verify_webauthn(self, state, response):
+        try:
+            credential, authenticator = self.webauthn.authenticate_complete(
+                state, response, self.user)
+        except ValueError:
+            self.increment_failure_counter()
+            return False
+
+        try:
+            self.update_usage_counter(authenticator.counter)
+        except U2fDeviceClonedError:
+            return False
+        return True
 
     def get_throttle_factor(self):
         return getattr(settings, 'OTP_U2F_THROTTLE_FACTOR', 1)
 
     @classmethod
-    def begin_registration(cls, user, app_id):
-        """
-        Start registering a U2F security key.
-
-        :return: request
-        """
-        return begin_registration(
-            app_id, [key.as_device_registration()
-                     for key in cls.objects.filter(user=user, confirmed=True)])
+    def get_credentials(cls, user):
+        return [
+            key.as_credential()
+            for key in cls.objects.filter(user=user, confirmed=True)]
 
     @classmethod
-    def complete_registration(cls, request, response):
-        """
-        Complete registering a U2F security key.
+    def get_device(cls, user, credential):
+        return cls.objects.get(
+            user=user, confirmed=True,
+            credential=urlsafe_b64encode(credential).decode())
 
-        :return: DeviceRegistration, certificate
-        """
-        response['version'] = 'U2F_V2'
-        return complete_registration(request, response)
+    def increment_failure_counter(self):
+        U2fDevice.objects.filter(pk=self.pk).update(
+            throttling_failure_timestamp=timezone.now(),
+            throttling_failure_count=F('throttling_failure_count') + 1
+        )
 
-    @classmethod
-    def begin_authentication(cls, user, app_id):
-        """
-        Start authenticating a U2F security key.
-
-        :return: request
-        """
-        return begin_authentication(
-            app_id, [key.as_device_registration()
-                     for key in cls.objects.filter(user=user, confirmed=True)])
-
-    @classmethod
-    def complete_authentication(cls, user, request, response):  # noqa: C901
-        """
-        Complete authenticating a U2F security key.
-
-        :return: Device, boolean
-        """
-        try:
-            response = SignResponse.wrap(response)
-        except ValueError:
-            return None, False
-
-        queryset = cls.objects.filter(
-            user=user, key_handle=response['keyHandle'], confirmed=True)
-        try:
-            device = queryset.get()
-        except cls.DoesNotExist:
-            return None, False
-        except cls.MultipleObjectsReturned:
-            # This should never happen because all the users keys are included
-            # in the registration and the U2F client should not try to register
-            # the same key twice. (At least chrome doesn't)
-            for device in queryset.order_by('id')[1:]:
-                log.warning('Removing duplicate device %r', device)
-                device.delete()
-            device = queryset.get()
-
-        if not device.verify_is_allowed()[0]:
-            return device, False
-
-        try:
-            _device, counter, _presence = complete_authentication(
-                request, response)
-        except ValueError:
-            queryset.update(
-                throttling_failure_timestamp=timezone.now(),
-                throttling_failure_count=F('throttling_failure_count') + 1
-            )
-            return device, False
-
+    def update_usage_counter(self, counter):
+        queryset = U2fDevice.objects.filter(pk=self.pk)
         n = queryset.filter(counter__lt=counter).update(
             throttling_failure_timestamp=None, throttling_failure_count=0,
             counter=counter)
@@ -147,11 +123,13 @@ class U2fDevice(ThrottlingMixin, Device):
             raise U2fDeviceClonedError(
                 'U2F appears to be cloned, expected counter > {} but got {} '
                 'instead. The device {} has been disabled.'.format(
-                    device.counter, counter, device.persistent_id))
+                    self.counter, counter, self.persistent_id))
 
-        return device, True
-
-    def as_device_registration(self):
-        return DeviceRegistration(
-            appId=self.app_id, version=self.version, keyHandle=self.key_handle,
-            publicKey=self.public_key, transports=json.loads(self.transports))
+    def as_credential(self):
+        credential = urlsafe_b64decode(self.credential)
+        public_key = urlsafe_b64decode(self.public_key)
+        if self.version == 'U2F_V2':
+            return AttestedCredentialData.from_ctap1(credential, public_key)
+        else:
+            return AttestedCredentialData.create(
+                self.aaguid.bytes, credential, cbor.decode(public_key))

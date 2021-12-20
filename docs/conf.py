@@ -18,7 +18,7 @@
 # relative to the documentation root, use os.path.abspath to make it
 # absolute, like shown here.
 #
-from importlib.metadata import version
+from importlib.metadata import version as metadata_version
 import os
 import sys
 
@@ -60,7 +60,7 @@ author = u"Harm Geerts"
 # the built documents.
 #
 # The short X.Y version.
-version = version('django-otp-u2f')
+version = metadata_version('django-otp-u2f')
 # The full version, including alpha/beta/rc tags.
 release = version
 

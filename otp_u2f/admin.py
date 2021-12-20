@@ -11,8 +11,8 @@ class U2fDeviceAdmin(admin.ModelAdmin):
             'fields': ['user', 'name', 'confirmed'],
         }),
         ('Configuration', {
-            'fields': ['app_id', 'version', 'key_handle', 'public_key',
-                       'transports'],
+            'fields': [
+                'rp_id', 'version', 'credential', 'aaguid', 'public_key'],
         }),
         ('State', {
             'fields': ['counter'],

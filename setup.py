@@ -1,4 +1,4 @@
-"""The closso setup script."""
+"""The django-otp-u2f setup script."""
 
 from setuptools import setup
 
