@@ -7,10 +7,25 @@ from django.db.models.functions import Concat
 
 def add_base64_padding(apps, schema_editor):
     U2fDevice = apps.get_model('otp_u2f', 'U2fDevice')
-    U2fDevice.objects.all().update(
-        credential=Concat(F('credential'), Value('===')),
-        public_key=Concat(F('public_key'), Value('===')),
+    credential_qs = U2fDevice.objects.annotate(
+        padding=Value(4) - Mod(Length('credential'), Value(4))
     )
+    credential_qs.filter(padding=1).update(
+        credential=Concat(F('credential'), Value('=')))
+    credential_qs.filter(padding=2).update(
+        credential=Concat(F('credential'), Value('==')))
+    credential_qs.filter(padding=3).update(
+        credential=Concat(F('credential'), Value('===')))
+
+    public_key_qs = U2fDevice.objects.annotate(
+        padding=Value(4) - Mod(Length('public_key'), Value(4))
+    )
+    public_key_qs.filter(padding=1).update(
+        public_key=Concat(F('public_key'), Value('=')))
+    public_key_qs.filter(padding=2).update(
+        public_key=Concat(F('public_key'), Value('==')))
+    public_key_qs.filter(padding=3).update(
+        public_key=Concat(F('public_key'), Value('===')))
 
 
 class Migration(migrations.Migration):

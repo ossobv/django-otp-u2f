@@ -1,4 +1,4 @@
-import json
+from base64 import urlsafe_b64decode
 
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory
@@ -6,23 +6,36 @@ from django.test import RequestFactory
 import pytest
 
 from kleides_mfa.registry import registry
-from u2flib_host import u2f
-from u2flib_host.soft import SoftU2FDevice
 
-from otp_u2f.forms import U2fDeviceCreateForm, U2fVerifyForm
-from otp_u2f.models import U2fDevice
+from otp_u2f.forms import (
+    U2F_AUTHENTICATION_KEY, U2F_REGISTRATION_KEY, U2fDeviceCreateForm,
+    U2fVerifyForm)
+from otp_u2f.views import AuthenticateChallengeView, RegisterChallengeView
 
-from .factories import UserFactory
+from .factories import U2fDeviceFactory, UserFactory
+
+AUTH_CREDENTIAL = 'n8ZklynFZSmYNrICld-ShxDR64QVrov2FEmy-PaHVtVE_WCj1HpLfPMgdDBQEBK5tC7TY3U0iNGTDiWWfxLylg=='  # noqa
+AUTH_PUBLIC_KEY = 'pQECAyYgASFYIKL35NsyHSsIXBqC2upUvILPoOzkuAPc2x1AT7Mkvm0fIlggJVbR-teZTDVVL7NMRLob3gZmnz0hzloFXHzOukIWIF8='  # noqa
+AUTH_STATE = {
+    'challenge': 'bnRQVde1p9L_W70ll7_HOxY3WMRME57IIVJURPr16Sk',
+    'user_verification': None,
+}
+AUTH_DATA = {'otp_token': 'pGlzaWduYXR1cmVYSDBGAiEAjJz5c08jnc4kxvA1mCtd_oUfejhqbpKvp69q1CU6gqICIQDE8HZY1kwAaBOAm_WdhtLH0WUB-rd6FcDIEX477ddhQmxjcmVkZW50aWFsSWRYQJ_GZJcpxWUpmDayApXfkocQ0euEFa6L9hRJsvj2h1bVRP1go9R6S3zzIHQwUBASubQu02N1NIjRkw4lln8S8pZuY2xpZW50RGF0YUpTT05YknsidHlwZSI6IndlYmF1dGhuLmdldCIsImNoYWxsZW5nZSI6ImJuUlFWZGUxcDlMX1c3MGxsN19IT3hZM1dNUk1FNTdJSVZKVVJQcjE2U2siLCJvcmlnaW4iOiJodHRwczovL2xvY2FsaG9zdC5vc3NvLm5pbmphOjUwMDAiLCJjcm9zc09yaWdpbiI6ZmFsc2V9cWF1dGhlbnRpY2F0b3JEYXRhWCUSXIrubSsKmsf2hd4Z9cy0vPwqgMw1u7Eoq5rF5711UQEAAAAE'}  # noqa
 
 
-def get_form_kwargs(user=None):
-    if user is None:
-        user = UserFactory()
-    plugin = registry.get_plugin('u2f')
-    request = RequestFactory().get('/u2f/create/')
-    request.session = {}
-    request.user = user
-    return {'plugin': plugin, 'request': request}
+REG_CREDENTIAL = 'WwyEN7OnJb6KhQS_NDn4oGbiVPSuIxmKwo-77r_8nG2BKhoyQlYvuG3uS8Wa688Yi_tZNFG7mXhRaC3lUtWCnw=='  # noqa
+REG_PUBLIC_KEY = 'pQECAyYgASFYIGX54GU6pZBsdbVEw6B7sGCrtKUaHmu62JTMBLd_U64_IlggERQvKwWtfZX8mvREWzv1mrTh2tsLvHlcCCH4247nZpM='  # noqa
+REG_STATE = {
+    'challenge': 'Mjl7qc7IRNrjUgTssfOdCm0Uz4u_94de0b-feXDAp-U',
+    'user_verification': 'discouraged',
+}
+REG_DATA = {'otp_token': 'om5jbGllbnREYXRhSlNPTliVeyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiTWpsN3FjN0lSTnJqVWdUc3NmT2RDbTBVejR1Xzk0ZGUwYi1mZVhEQXAtVSIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Lm9zc28ubmluamE6NTAwMCIsImNyb3NzT3JpZ2luIjpmYWxzZX1xYXR0ZXN0YXRpb25PYmplY3RY4qNjZm10ZG5vbmVnYXR0U3RtdKBoYXV0aERhdGFYxBJciu5tKwqax_aF3hn1zLS8_CqAzDW7sSirmsXnvXVRQQAAAAAAAAAAAAAAAAAAAAAAAAAAAEBbDIQ3s6clvoqFBL80OfigZuJU9K4jGYrCj7vuv_ycbYEqGjJCVi-4be5LxZrrzxiL-1k0UbuZeFFoLeVS1YKfpQECAyYgASFYIGX54GU6pZBsdbVEw6B7sGCrtKUaHmu62JTMBLd_U64_IlggERQvKwWtfZX8mvREWzv1mrTh2tsLvHlcCCH4247nZpM='}  # noqa
+
+
+@pytest.fixture
+def rfactory(settings):
+    settings.ALLOWED_HOSTS = ['localhost.osso.ninja',  'testserver']
+    return RequestFactory(SERVER_NAME='localhost.osso.ninja')
 
 
 @pytest.mark.django_db()
@@ -33,151 +46,148 @@ def test_plugin():
 
     user = UserFactory()
     # When a user logs in the OTP device is added as a property.
-    user.otp_device = U2fDevice.objects.create(user=user)
+    user.otp_device = U2fDeviceFactory(user=user)
     assert registry.user_authentication_method(user) == 'u2f'
 
 
 @pytest.mark.django_db()
-def test_create_form_failure():
-    form_kwargs = get_form_kwargs()
-    form = U2fDeviceCreateForm(**form_kwargs)
-    client_data = form.data_for_client()
-    assert client_data['appId'] == 'http://testserver'
-    challenge = client_data['registerRequests'][0]
-    assert challenge['appId'] == 'http://testserver'
-    assert 'challenge' in challenge
-    assert challenge['version'] == 'U2F_V2'
+def test_authenticate_challenge_view(rfactory, webauthn):
+    request = rfactory.post('/u2f/auth/challenge/')
+    request.session = {}
+    view = AuthenticateChallengeView()
+    view.setup(request)
+    view.unverified_user = UserFactory()
+    response = view.post(request)
+    assert response.status_code == 200
+    challenge = webauthn.decode(response.content + b'===')
+    state = request.session[U2F_AUTHENTICATION_KEY]
+    key = challenge['publicKey']
+    assert key['rpId'] == 'localhost.osso.ninja'
+    assert key['challenge'] == urlsafe_b64decode(state['challenge'] + '===')
+    assert key['extensions'] == {'appid': 'http://localhost.osso.ninja'}
 
-    form = U2fDeviceCreateForm(
-        data={'name': 'Bad input', 'otp_token': 'XXX'}, **form_kwargs)
+
+@pytest.mark.django_db()
+def test_register_challenge_view(rfactory, webauthn):
+    request = rfactory.post('/u2f/register/challenge/')
+    request.session = {}
+    request.user = UserFactory()
+    response = RegisterChallengeView.as_view()(request)
+    assert response.status_code == 200
+    challenge = webauthn.decode(response.content + b'===')
+    state = request.session[U2F_REGISTRATION_KEY]
+    key = challenge['publicKey']
+    assert key['rp']['id'] == 'localhost.osso.ninja'
+    assert key['challenge'] == urlsafe_b64decode(state['challenge'] + '===')
+    assert key['extensions'] == {'appidExclude': 'http://localhost.osso.ninja'}
+    assert key['user']['id'] == str(request.user.pk).encode()
+    assert key['user']['name'] == request.user.username
+
+
+@pytest.mark.django_db()
+def test_register_form(rfactory):
+    user = UserFactory()
+    plugin = registry.get_plugin('u2f')
+    request = rfactory.post('/u2f/register/')
+    request.session = {U2F_REGISTRATION_KEY: REG_STATE}
+    request.user = user
+
+    form = U2fDeviceCreateForm(data=REG_DATA, plugin=plugin, request=request)
+    assert form.is_valid(), form.errors
+    device = form.save()
+    assert device.version == 'webauthn'
+    assert device.aaguid.hex == '00000000000000000000000000000000'
+    assert device.credential == REG_CREDENTIAL
+    assert device.public_key == REG_PUBLIC_KEY
+    assert device.counter == 0
+
+
+@pytest.mark.django_db()
+def test_register_form_failure(rfactory):
+    user = UserFactory()
+    plugin = registry.get_plugin('u2f')
+    request = rfactory.post('/u2f/reqister/')
+    request.session = {}
+    request.user = user
+
+    form = U2fDeviceCreateForm(data={}, plugin=plugin, request=request)
     assert not form.is_valid()
-    assert 'The U2F key could not be verified.' in form.errors['__all__']
+    assert 'This field is required.' in form.errors['otp_token']
+    assert 'The registration request has expired, try again' in form.errors['__all__']  # noqa
+
+    request.session = {U2F_REGISTRATION_KEY: REG_STATE}
+    form = U2fDeviceCreateForm(
+        data={'otp_token': 'xxx'}, plugin=plugin, request=request)
+    assert not form.is_valid()
+    assert 'The registration request is invalid' in form.errors['__all__']
+
+    request = rfactory.get('/u2f/create/', SERVER_NAME='testserver')
+    request.session = {U2F_REGISTRATION_KEY: REG_STATE}
+    request.user = user
+    form = U2fDeviceCreateForm(data=REG_DATA, plugin=plugin, request=request)
+    assert not form.is_valid()
+    assert 'Device registration failure (reason: Invalid origin in ClientData.)' in form.errors['__all__']  # noqa
 
 
 @pytest.mark.django_db()
-def test_create_form_default_name(tmp_path):
-    user = UserFactory()
-    form_kwargs = get_form_kwargs(user)
-    form = U2fDeviceCreateForm(**form_kwargs)
-    challenge = form.data_for_client()['registerRequests'][0]
-
-    soft_device = SoftU2FDevice(tmp_path / 'device.u2f')
-    response = u2f.register(
-        soft_device, challenge, 'http://testserver')
-    form = U2fDeviceCreateForm(
-        data={'name': 'U2F', 'otp_token': json.dumps(response)},
-        **form_kwargs)
-    assert form.is_valid()
-    device = form.save()
-    assert device.confirmed
-    assert device.user == user
-    assert device.name == 'Yubico U2F Soft Device'
-
-
-@pytest.mark.django_db()
-def test_verify_form(settings, tmp_path):
-    settings.OTP_U2F_THROTTLE_FACTOR = 0
-    user = UserFactory()
-    form_kwargs = get_form_kwargs(user)
-
-    form = U2fDeviceCreateForm(**form_kwargs)
-    challenge = form.data_for_client()['registerRequests'][0]
-
-    soft_device = SoftU2FDevice(tmp_path / 'device.u2f')
-    response = u2f.register(
-        soft_device, challenge, 'http://testserver')
-    form = U2fDeviceCreateForm(
-        data={'name': 'My Key', 'otp_token': json.dumps(response)},
-        **form_kwargs)
-    assert form.is_valid()
-    device = form.save()
-    assert device.confirmed
-    assert device.user == user
-    assert device.name == 'My Key'
-
+def test_authenticate_form(rfactory, settings):
+    other_device = U2fDeviceFactory()
+    device = U2fDeviceFactory(
+        credential=AUTH_CREDENTIAL, public_key=AUTH_PUBLIC_KEY)
+    user = device.user
+    plugin = registry.get_plugin('u2f')
+    request = rfactory.post('/u2f/authenticate/')
+    request.session = {U2F_AUTHENTICATION_KEY: AUTH_STATE}
     # Verification requests require the user to have authenticated with
-    # a password but lack the django session variables the middleware
-    # uses to load the user for a session.
-    form_kwargs = get_form_kwargs(AnonymousUser())
-    form = U2fVerifyForm(
-        device=device, unverified_user=user, **form_kwargs)
-    client_data = form.data_for_client()
-    assert client_data['appId'] == 'http://testserver'
-    assert 'challenge' in client_data
-    assert len(client_data['registeredKeys']) == 1
-    challenge = client_data['registeredKeys'][0]
-    assert challenge['appId'] == 'http://testserver'
-    assert 'challenge' in challenge
-    assert 'keyHandle' in challenge
-    assert challenge['version'] == 'U2F_V2'
+    # a password but lack the session variables for the session middleware
+    # to load the user. They are effectively anonymous.
+    request.user = AnonymousUser()
 
+    form = U2fVerifyForm(
+        data=AUTH_DATA, device=other_device, unverified_user=user,
+        plugin=plugin, request=request)
+    assert form.is_valid(), form.errors
+    # webauth presents all known devices to the user and will return the device
+    # that was used to complete authentication (started with other_device).
+    assert form.device == device
+    assert form.device.counter == 4
+
+
+@pytest.mark.django_db()
+def test_authenticate_form_failure(rfactory, settings):
+    settings.OTP_U2F_THROTTLE_FACTOR = 0
+    device = U2fDeviceFactory(
+        credential=AUTH_CREDENTIAL, public_key=AUTH_PUBLIC_KEY, counter=5)
+    user = device.user
+    plugin = registry.get_plugin('u2f')
+    request = rfactory.post('/u2f/authenticate/')
+    request.session = {}
+    # Verification requests require the user to have authenticated with
+    # a password but lack the session variables for the session middleware
+    # to load the user. They are effectively anonymous.
+    request.user = AnonymousUser()
+
+    # Auth with an expired challenge fails.
+    form = U2fVerifyForm(
+        data={}, device=device, unverified_user=user,
+        plugin=plugin, request=request)
+    assert not form.is_valid()
+    assert 'This field is required.' in form.errors['otp_token']
+    assert 'The authentication request has expired, try again' in form.errors['__all__']  # noqa
+
+    request.session = {U2F_AUTHENTICATION_KEY: AUTH_STATE}
     # Nonsense token data.
     form = U2fVerifyForm(
-        device=device, unverified_user=user,
-        data={'otp_token': 'XXX'}, **form_kwargs)
+        data={'otp_token': 'XXX'}, device=device, unverified_user=user,
+        plugin=plugin, request=request)
     assert not form.is_valid()
-    assert not form.get_device()
+    assert 'The authentication request is invalid' in form.errors['__all__']
 
-    # Sign using a consumed challenge will fail.
-    response = u2f.authenticate(
-        soft_device, challenge, 'http://testserver', False)
+    request.session = {U2F_AUTHENTICATION_KEY: AUTH_STATE}
+    # Test authenticator counter.
     form = U2fVerifyForm(
-        device=device, unverified_user=user,
-        data={'otp_token': json.dumps(response)}, **form_kwargs)
-    assert form.data_for_client()['registeredKeys'][0] != challenge
+        data=AUTH_DATA, device=device, unverified_user=user,
+        plugin=plugin, request=request)
     assert not form.is_valid()
-    assert not form.get_device()
-
-    # Sign with a new challenge.
-    form = U2fVerifyForm(
-        device=device, unverified_user=user, **form_kwargs)
-    challenge = form.data_for_client()['registeredKeys'][0]
-    response = u2f.authenticate(
-        soft_device, challenge, 'http://testserver', False)
-    form = U2fVerifyForm(
-        device=device, unverified_user=user,
-        data={'otp_token': json.dumps(response)}, **form_kwargs)
-    assert form.is_valid()
-    assert form.get_device() == device
-
-    # Request replay will fail.
-    form = U2fVerifyForm(
-        device=device, unverified_user=user,
-        data={'otp_token': json.dumps(response)}, **form_kwargs)
-    assert form.data_for_client()['registeredKeys'][0] != challenge
-    assert not form.is_valid()
-    assert not form.get_device()
-
-    # Check that verification returns the U2F device that was used to sign the
-    # challenge. This is possible because all the users U2F devices are
-    # included in the challenge request for ease of use.
-    form_kwargs = get_form_kwargs(user)
-    form = U2fDeviceCreateForm(**form_kwargs)
-    challenge = form.data_for_client()['registerRequests'][0]
-    soft_device2 = SoftU2FDevice(tmp_path / 'device2.u2f')
-    response = u2f.register(soft_device2, challenge, 'http://testserver')
-    form = U2fDeviceCreateForm(
-        data={'name': '2nd Key', 'otp_token': json.dumps(response)},
-        **form_kwargs)
-    assert form.is_valid()
-    device2 = form.save()
-    assert device2.confirmed
-    assert device2.user == user
-    assert device2.name == '2nd Key'
-
-    # Initiate verification with the 1st U2F device. (GET)
-    form = U2fVerifyForm(
-        device=device, unverified_user=user, **form_kwargs)
-    client_data = form.data_for_client()
-    assert len(client_data['registeredKeys']) == 2
-    challenge = form.data_for_client()['registeredKeys'][1]
-    # Sign with the 2nd device.
-    response = u2f.authenticate(
-        soft_device2, challenge, 'http://testserver', False)
-    # Continue verification with the 1st device. (POST)
-    form = U2fVerifyForm(
-        device=device, unverified_user=user,
-        data={'otp_token': json.dumps(response)}, **form_kwargs)
-    assert form.is_valid()
-    # The actual device used for authentication.
-    assert form.get_device() == device2
+    assert not form.device.confirmed
+    assert f'Device authentication failure (reason: Device appears to be cloned, expected counter > 5 but got 4 instead. The device otp_u2f.u2fdevice/{device.pk} has been disabled.)' in form.errors['__all__']  # noqa

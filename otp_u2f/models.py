@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 U2F_REQUEST_TIMEOUT = 300
 
 
-class U2fDeviceClonedError(SuspiciousOperation):
+class DeviceClonedError(SuspiciousOperation):
     pass
 
 
@@ -84,7 +84,7 @@ class U2fDevice(ThrottlingMixin, Device):
 
         try:
             self.update_usage_counter(authenticator.counter)
-        except U2fDeviceClonedError:
+        except DeviceClonedError:
             return False
         return True
 
@@ -108,6 +108,7 @@ class U2fDevice(ThrottlingMixin, Device):
             throttling_failure_timestamp=timezone.now(),
             throttling_failure_count=F('throttling_failure_count') + 1
         )
+        self.refresh_from_db()
 
     def update_usage_counter(self, counter):
         queryset = U2fDevice.objects.filter(pk=self.pk)
@@ -120,10 +121,12 @@ class U2fDevice(ThrottlingMixin, Device):
                 throttling_failure_timestamp=timezone.now(),
                 throttling_failure_count=F('throttling_failure_count') + 1,
             )
-            raise U2fDeviceClonedError(
-                'U2F appears to be cloned, expected counter > {} but got {} '
-                'instead. The device {} has been disabled.'.format(
+            self.refresh_from_db()
+            raise DeviceClonedError(
+                'Device appears to be cloned, expected counter > {} but got '
+                '{} instead. The device {} has been disabled.'.format(
                     self.counter, counter, self.persistent_id))
+        self.refresh_from_db()
 
     def as_credential(self):
         credential = urlsafe_b64decode(self.credential)

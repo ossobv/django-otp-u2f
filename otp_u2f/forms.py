@@ -9,7 +9,7 @@ from django.utils.translation import gettext_lazy as _
 
 from kleides_mfa.forms import BaseVerifyForm, DeviceCreateForm
 
-from .models import U2fDeviceClonedError, U2fDevice
+from .models import DeviceClonedError, U2fDevice
 from .utils import Webauthn
 
 U2F_AUTHENTICATION_KEY = 'kleides-mfa-u2f-authentication-key'
@@ -33,7 +33,7 @@ class U2fDeviceCreateForm(DeviceCreateForm):
                 self._state, data)
         except Exception as e:
             raise forms.ValidationError(
-                _('The U2F key could not be verified. (reason: {})').format(e))
+                _('Device registration failure (reason: {})').format(e))
         finally:
             if U2F_REGISTRATION_KEY in self.request.session:  # noqa: E501; pragma: no cover
                 del self.request.session[U2F_REGISTRATION_KEY]
@@ -51,7 +51,7 @@ class U2fDeviceCreateForm(DeviceCreateForm):
     def clean_input(self):
         if self._state is None:
             raise forms.ValidationError(
-                _('The registration request has expired, try again.'))
+                _('The registration request has expired, try again'))
 
         try:
             return self._webauthn.decode(
@@ -82,19 +82,21 @@ class U2fVerifyForm(BaseVerifyForm):
         try:
             credential, authenticator = self._webauthn.authenticate_complete(
                 self._state, data, self.unverified_user)
-        except ValueError:
+        except ValueError as e:
             self.device.increment_failure_counter()
-            raise forms.ValidationError(_('Device verification failure'))
+            raise forms.ValidationError(
+                _('Device authentication failure (reason: {})').format(e))
 
         try:
             self.device.update_usage_counter(authenticator.counter)
-        except U2fDeviceClonedError:
-            raise forms.ValidationError(_('Device verification failure'))
+        except DeviceClonedError as e:
+            raise forms.ValidationError(
+                _('Device authentication failure (reason: {})').format(e))
 
     def clean_input(self):
         if self._state is None:
             raise forms.ValidationError(
-                _('The authentication request has expired, try again.'))
+                _('The authentication request has expired, try again'))
 
         try:
             return self._webauthn.decode(
