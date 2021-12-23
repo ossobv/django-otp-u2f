@@ -2,7 +2,7 @@
 
 from django.db import migrations, models
 from django.db.models import F, Value
-from django.db.models.functions import Concat
+from django.db.models.functions import Concat, Length, Mod
 
 
 def add_base64_padding(apps, schema_editor):
