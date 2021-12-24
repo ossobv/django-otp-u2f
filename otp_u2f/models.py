@@ -1,5 +1,4 @@
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from functools import cached_property
 import logging
 
 from django.conf import settings
@@ -8,6 +7,7 @@ from django.core.exceptions import SuspiciousOperation
 from django.db.models import (
     CharField, F, PositiveIntegerField, TextField, UUIDField)
 from django.utils import timezone
+from django.utils.functional import cached_property
 
 from django_otp.models import Device, ThrottlingMixin
 

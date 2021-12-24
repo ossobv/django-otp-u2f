@@ -1,8 +1,8 @@
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from functools import cached_property
 
 from django.conf import settings
 from django.contrib.sites.shortcuts import get_current_site
+from django.utils.functional import cached_property
 
 from fido2.cbor import decode as cbor_decode, encode as cbor_encode
 from fido2.client import ClientData
