@@ -7,14 +7,14 @@
 <script src="{% static 'js/cbor.js' %}"></script>
 <script type="text/javascript">
 jQuery(function ($) {
-    var try_again_button = $('<button class="btn btn-primary" type="button"/>')
-        .text('{{ _('Try again')|escapejs }}')
+    var register_button = $('<button class="btn btn-primary" type="button"/>')
+        .text('{{ _('Register')|escapejs }}')
         .on('click', register_start)
         .wrap('<div/>');
-    try_again_button.parent().appendTo('#kleides-mfa-form');
+    register_button.parent().appendTo('#kleides-mfa-form');
 
     function register_start() {
-        try_again_button.hide();
+        register_button.hide();
         fetch('{% url "otp_u2f:register" %}', {
             method: 'POST',
             headers: {'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()}
@@ -32,17 +32,14 @@ jQuery(function ($) {
             form.submit();
         }).catch(function (error) {
             $('#u2f-registration-error').show();
-            try_again_button.show();
+            register_button.show();
             console.debug(error);
         });
     }
 
     if (!window.PublicKeyCredential) {
         $('#u2f-support-warning').toggle(true);
-    } else if ($('#kleides-mfa-form').find('.alert').length > 0) {
-        try_again_button.show();
-    } else {
-        register_start();
+        register_button.hide();
     }
 });
 </script>
@@ -50,10 +47,10 @@ jQuery(function ($) {
 
 {% block form_description %}
 <div id='u2f-registration-error' class='alert alert-danger' style='display: none;'>
-{% trans 'Unable to register U2F device. Reload the page to try again.' %}
+{% trans 'Unable to register U2F device. Please try again.' %}
 </div>
 <div id='u2f-timeout' class='alert alert-danger' style='display: none;'>
-{% trans 'Timeout while waiting for U2F response. Reload the page to try again.' %}
+{% trans 'Timeout while waiting for U2F response. Please try again.' %}
 </div>
 
 <div id='u2f-already-registered' class='alert alert-warning' style='display: none;'>
@@ -79,6 +76,6 @@ The following browsers currently support the use of web authentication security 
 </div>
 
 <p>
-{% trans 'Connect your U2F device and press the button to add it to your account.' %}
+{% trans 'Connect your U2F device and press register to add it to your account.' %}
 </p>
 {% endblock form_description %}
