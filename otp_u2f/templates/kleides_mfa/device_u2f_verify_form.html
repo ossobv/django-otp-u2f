@@ -7,12 +7,13 @@
 <script src="{% static 'js/cbor.js' %}"></script>
 <script type="text/javascript">
 jQuery(function ($) {
-    var try_again_button = $('<button class="btn btn-primary" type="button"/>')
+    var form = $('#kleides-mfa-verify-form').on('submit', authenticate_start);
+    var try_again_button = $('<button class="btn btn-primary" type="submit"/>')
         .text('{{ _('Try again')|escapejs }}')
-        .on('click', authenticate_start)
         .insertAfter('#kleides-mfa-alternate-methods');
 
-    function authenticate_start() {
+    function authenticate_start(event) {
+        event.preventDefault();
         try_again_button.hide();
         fetch('{% url "otp_u2f:authenticate" %}', {
             method: 'POST',
@@ -23,14 +24,13 @@ jQuery(function ($) {
         }).then(B64_AB.decode).then(CBOR.decode).then(function (options) {
             return navigator.credentials.get(options);
         }).then(function(assertion) {
-            var form = document.getElementById('kleides-mfa-verify-form');
-            form.otp_token.value = B64_AB.encode(CBOR.encode({
+            $('#id_otp_token').val(B64_AB.encode(CBOR.encode({
               'credentialId': new Uint8Array(assertion.rawId),
               'authenticatorData': new Uint8Array(assertion.response.authenticatorData),
               'clientDataJSON': new Uint8Array(assertion.response.clientDataJSON),
               'signature': new Uint8Array(assertion.response.signature)
-            }))
-            form.submit();
+            })));
+            form.off('submit').submit();
         }).catch(function (error) {
             $('#u2f-authentication-error').show();
             try_again_button.show();
@@ -40,10 +40,10 @@ jQuery(function ($) {
 
     if (!window.PublicKeyCredential) {
         $('#u2f-support-warning').show();
-    } else if ($('#kleides-mfa-verify-form').find('.alert').length > 0) {
+    } else if (form.find('.alert').length > 0) {
         try_again_button.show();
     } else {
-        authenticate_start();
+        form.submit();
     }
 });
 </script>

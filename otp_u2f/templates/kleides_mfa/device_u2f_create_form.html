@@ -7,13 +7,14 @@
 <script src="{% static 'js/cbor.js' %}"></script>
 <script type="text/javascript">
 jQuery(function ($) {
-    var register_button = $('<button class="btn btn-primary" type="button"/>')
+    var form = $('#kleides-mfa-form').on('submit', register_start);
+    var register_button = $('<button class="btn btn-primary" type="submit"/>')
         .text('{{ _('Register')|escapejs }}')
-        .on('click', register_start)
         .wrap('<div/>');
-    register_button.parent().appendTo('#kleides-mfa-form');
+    register_button.parent().appendTo(form);
 
-    function register_start() {
+    function register_start(event) {
+        event.preventDefault();
         register_button.hide();
         fetch('{% url "otp_u2f:register" %}', {
             method: 'POST',
@@ -24,12 +25,11 @@ jQuery(function ($) {
         }).then(B64_AB.decode).then(CBOR.decode).then(function (options) {
             return navigator.credentials.create(options);
         }).then(function (attestation) {
-            var form = document.getElementById('kleides-mfa-form');
-            form.otp_token.value = B64_AB.encode(CBOR.encode({
+            $('#id_otp_token').val(B64_AB.encode(CBOR.encode({
               'attestationObject': new Uint8Array(attestation.response.attestationObject),
               'clientDataJSON': new Uint8Array(attestation.response.clientDataJSON)
-            }));
-            form.submit();
+            })));
+            form.off('submit').submit();
         }).catch(function (error) {
             $('#u2f-registration-error').show();
             register_button.show();
@@ -38,7 +38,7 @@ jQuery(function ($) {
     }
 
     if (!window.PublicKeyCredential) {
-        $('#u2f-support-warning').toggle(true);
+        $('#u2f-support-warning').show();
         register_button.hide();
     }
 });

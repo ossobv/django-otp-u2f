@@ -2,11 +2,18 @@
 History
 =======
 
+0.2.4 (2022-01-13)
+------------------
+
+* Allow form submission with keyboard.
+
+
 0.2.3 (2021-12-24)
 ------------------
 
 * Delay key registration until the button is pressed to allow the user
   to change the name of the key during registration.
+
 
 0.2.2 (2021-12-24)
 ------------------
