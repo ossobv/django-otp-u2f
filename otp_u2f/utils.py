@@ -5,10 +5,9 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.utils.functional import cached_property
 
 from fido2.cbor import decode as cbor_decode, encode as cbor_encode
-from fido2.client import ClientData
-from fido2.ctap2 import AttestationObject, AuthenticatorData
 from fido2.server import U2FFido2Server
 from fido2.webauthn import (
+    AttestationObject, AuthenticatorData, CollectedClientData,
     PublicKeyCredentialRpEntity, UserVerificationRequirement)
 
 from .models import U2fDevice
@@ -36,7 +35,7 @@ class Webauthn(U2FFido2Server):
                 app_id = f'https://{rp_id}'
 
         return U2FFido2Server(
-            app_id, rp=PublicKeyCredentialRpEntity(rp_id, rp_name),
+            app_id, rp=PublicKeyCredentialRpEntity(id=rp_id, name=rp_name),
             attestation='direct')
 
     @property
@@ -57,7 +56,7 @@ class Webauthn(U2FFido2Server):
         credential = self.server.authenticate_complete(
             state, credentials=U2fDevice.get_credentials(user),
             credential_id=data['credentialId'],
-            client_data=ClientData(data['clientDataJSON']),
+            client_data=CollectedClientData(data['clientDataJSON']),
             auth_data=auth_data,
             signature=data['signature'])
         return (credential, auth_data)
@@ -73,7 +72,7 @@ class Webauthn(U2FFido2Server):
 
     def register_complete(self, state, data):
         return self.server.register_complete(
-            state, client_data=ClientData(data['clientDataJSON']),
+            state, client_data=CollectedClientData(data['clientDataJSON']),
             attestation_object=AttestationObject(data['attestationObject']))
 
     def decode(self, data):

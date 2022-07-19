@@ -12,7 +12,7 @@ from django.utils.functional import cached_property
 from django_otp.models import Device, ThrottlingMixin
 
 from fido2 import cbor
-from fido2.ctap2 import AttestedCredentialData
+from fido2.webauthn import AttestedCredentialData
 
 log = logging.getLogger(__name__)
 
@@ -34,9 +34,7 @@ class U2fDevice(ThrottlingMixin, Device):
 
     # django-otp api
     def generate_challenge(self):
-        from .utils import Webauthn
-        webauthn = Webauthn()
-        request, state = webauthn.authenticate_begin(self.user)
+        request, state = self.webauthn.authenticate_begin(self.user)
         cache.set(state['challenge'], state, U2F_REQUEST_TIMEOUT)
         return request
 

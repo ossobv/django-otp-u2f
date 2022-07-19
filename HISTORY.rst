@@ -2,10 +2,18 @@
 History
 =======
 
+
+0.3.0 (2022-07-19)
+------------------
+
+* Upgrade to fido2-1.0.0.
+* Update supported Django versions.
+
+
 0.2.5 (2022-06-09)
 ------------------
 
-* Depend on fido<1 because >=1 has breaking changes.
+* Depend on fido2<1 because >=1 has breaking changes.
 
 
 0.2.4 (2022-01-13)

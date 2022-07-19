@@ -47,3 +47,5 @@ TEMPLATES = [
 ]
 
 KLEIDES_MFA_PATCH_ADMIN = False
+
+USE_TZ = True

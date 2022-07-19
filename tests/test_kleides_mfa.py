@@ -126,7 +126,7 @@ def test_register_form_failure(rfactory):
     request.user = user
     form = U2fDeviceCreateForm(data=REG_DATA, plugin=plugin, request=request)
     assert not form.is_valid()
-    assert 'Device registration failure (reason: Invalid origin in ClientData.)' in form.errors['__all__']  # noqa
+    assert 'Device registration failure (reason: Invalid origin in CollectedClientData.)' in form.errors['__all__']  # noqa
 
 
 @pytest.mark.django_db()
