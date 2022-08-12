@@ -65,7 +65,7 @@ class Webauthn(U2FFido2Server):
         return self.server.register_begin({
             'id': str(user.pk).encode(),
             'name': user.get_username(),
-            'display_name': user.get_full_name() or user.get_username()},
+            'displayName': user.get_full_name() or user.get_username()},
             credentials=U2fDevice.get_credentials(user),
             user_verification=UserVerificationRequirement.DISCOURAGED,
         )
