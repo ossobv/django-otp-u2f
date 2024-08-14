@@ -2,6 +2,13 @@
 History
 =======
 
+0.3.2 (2024-08-14)
+------------------
+
+* Opt out of fido2 json friendly mappings and pin to fido2<2.0
+* Update test matrix and dependencies
+
+
 0.3.1 (2022-08-12)
 ------------------
 
