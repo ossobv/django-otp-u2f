@@ -2,7 +2,7 @@
 History
 =======
 
-0.3.3 (unreleased)
+0.3.3 (2025-01-27)
 ------------------
 
 * Fix device registration where the device signature counter is zero.
