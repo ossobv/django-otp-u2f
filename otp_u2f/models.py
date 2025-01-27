@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import SuspiciousOperation
 from django.db.models import (
-    CharField, F, PositiveIntegerField, TextField, UUIDField)
+    CharField, F, PositiveIntegerField, TextField, Q, UUIDField)
 from django.utils import timezone
 from django.utils.functional import cached_property
 
@@ -110,7 +110,10 @@ class U2fDevice(ThrottlingMixin, Device):
 
     def update_usage_counter(self, counter):
         queryset = U2fDevice.objects.filter(pk=self.pk)
-        n = queryset.filter(counter__lt=counter).update(
+        # Allow device registration where the device signature counter is zero.
+        # This enables devices that do not support a counter by keeping the
+        # counter at zero.
+        n = queryset.filter(Q(counter__lt=counter) | Q(counter=0)).update(
             throttling_failure_timestamp=None, throttling_failure_count=0,
             counter=counter)
         if n == 0:

@@ -2,6 +2,14 @@
 History
 =======
 
+0.3.3 (unreleased)
+------------------
+
+* Fix device registration where the device signature counter is zero.
+  This allows for devices that do not support a signature counter by
+  keeping the counter at zero.
+
+
 0.3.2 (2024-08-14)
 ------------------
 
