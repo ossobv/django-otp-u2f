@@ -4,7 +4,6 @@
 
 {% block extra_js %}{{ block.super }}
 <script src="{% static 'js/base64url-arraybuffer.js' %}"></script>
-<script src="{% static 'js/cbor.js' %}"></script>
 <script type="text/javascript">
 jQuery(function ($) {
     var form = $('#kleides-mfa-verify-form').on('submit', authenticate_start);
@@ -19,17 +18,20 @@ jQuery(function ($) {
             method: 'POST',
             headers: {'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()}
         }).then(function (response) {
-            if (response.ok) return response.text();
+            if (response.ok) return response.json();
             throw new Error('Failed to get authentication challenge');
-        }).then(B64_AB.decode).then(CBOR.decode).then(function (options) {
+        }).then(function (options) {
+            // Binary webauthn fields are websafe-base64 encoded.
+            if (typeof options.publicKey.challenge === 'string') {
+                options.publicKey.challenge = B64_AB.decode(options.publicKey.challenge);
+            }
+            options.publicKey.allowCredentials = options.publicKey.allowCredentials.map(cred => ({
+                ...cred,
+                id: typeof cred.id === 'string' ? B64_AB.decode(cred.id) : cred.id
+            }));
             return navigator.credentials.get(options);
         }).then(function(assertion) {
-            $('#id_otp_token').val(B64_AB.encode(CBOR.encode({
-              'credentialId': new Uint8Array(assertion.rawId),
-              'authenticatorData': new Uint8Array(assertion.response.authenticatorData),
-              'clientDataJSON': new Uint8Array(assertion.response.clientDataJSON),
-              'signature': new Uint8Array(assertion.response.signature)
-            })));
+            $('#id_otp_token').val(JSON.stringify(assertion));
             form.off('submit').submit();
         }).catch(function (error) {
             $('#u2f-authentication-error').show();

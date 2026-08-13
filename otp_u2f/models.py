@@ -1,4 +1,3 @@
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 import logging
 
 from django.conf import settings
@@ -12,6 +11,7 @@ from django.utils.functional import cached_property
 from django_otp.models import Device, ThrottlingMixin
 
 from fido2 import cbor
+from fido2.utils import websafe_decode, websafe_encode
 from fido2.webauthn import AttestedCredentialData
 
 log = logging.getLogger(__name__)
@@ -57,8 +57,7 @@ class U2fDevice(ThrottlingMixin, Device):
             if state is None:
                 return False
             cache.delete(response['clientData']['challenge'])
-            if self.credential != urlsafe_b64encode(
-                    response['credentialId']).decode():
+            if self.credential != websafe_encode(response['credentialId']):
                 # Using a different device.
                 return False
         except KeyError:
@@ -98,8 +97,7 @@ class U2fDevice(ThrottlingMixin, Device):
     @classmethod
     def get_device(cls, user, credential):
         return cls.objects.get(
-            user=user, confirmed=True,
-            credential=urlsafe_b64encode(credential).decode())
+            user=user, confirmed=True, credential=credential)
 
     def increment_failure_counter(self):
         U2fDevice.objects.filter(pk=self.pk).update(
@@ -130,8 +128,8 @@ class U2fDevice(ThrottlingMixin, Device):
         self.refresh_from_db()
 
     def as_credential(self):
-        credential = urlsafe_b64decode(self.credential)
-        public_key = urlsafe_b64decode(self.public_key)
+        credential = websafe_decode(self.credential)
+        public_key = websafe_decode(self.public_key)
         if self.version == 'U2F_V2':
             return AttestedCredentialData.from_ctap1(credential, public_key)
         else:

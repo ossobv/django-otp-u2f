@@ -1,16 +1,15 @@
-# -*- coding: utf-8 -*-
-from __future__ import absolute_import, unicode_literals
-
-from base64 import urlsafe_b64encode
+from json import loads
 from uuid import UUID
 
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from fido2.utils import websafe_encode
+from fido2.webauthn import AuthenticationResponse, RegistrationResponse
 from kleides_mfa.forms import BaseVerifyForm, DeviceCreateForm
 
 from .models import DeviceClonedError, U2fDevice
-from .utils import Webauthn
+from .utils import Webauthn, websafe_cbor_encode
 
 U2F_AUTHENTICATION_KEY = 'kleides-mfa-u2f-authentication-key'
 U2F_REGISTRATION_KEY = 'kleides-mfa-u2f-registration-key'
@@ -42,9 +41,9 @@ class U2fDeviceCreateForm(DeviceCreateForm):
         self.instance.rp_id = self._webauthn.rp_id
         self.instance.version = 'webauthn'
         self.instance.aaguid = UUID(bytes=credential_data.aaguid)
-        self.instance.credential = urlsafe_b64encode(
-            credential_data.credential_id).decode()
-        self.instance.public_key = self._webauthn.encode(
+        self.instance.credential = websafe_encode(
+            credential_data.credential_id)
+        self.instance.public_key = websafe_cbor_encode(
             credential_data.public_key)
         self.instance.counter = authenticator_data.counter
 
@@ -54,8 +53,13 @@ class U2fDeviceCreateForm(DeviceCreateForm):
                 _('The registration request has expired, try again'))
 
         try:
-            return self._webauthn.decode(
-                self.cleaned_data['otp_token'] + '===')
+            data = loads(self.cleaned_data['otp_token'])
+        except (TypeError, ValueError):
+            raise forms.ValidationError(
+                _('The registration request is invalid'))
+
+        try:
+            return RegistrationResponse.from_dict(data)
         except (KeyError, TypeError, ValueError):
             raise forms.ValidationError(
                 _('The registration request is invalid'))
@@ -99,16 +103,21 @@ class U2fVerifyForm(BaseVerifyForm):
                 _('The authentication request has expired, try again'))
 
         try:
-            return self._webauthn.decode(
-                self.cleaned_data['otp_token'] + '===')
-        except (KeyError, TypeError, ValueError):
+            data = loads(self.cleaned_data['otp_token'])
+        except (TypeError, ValueError):
             raise forms.ValidationError(
                 _('The authentication request is invalid'))
+
+        try:
+            return AuthenticationResponse.from_dict(data)
+        except (KeyError, TypeError, ValueError):
+            raise forms.ValidationError(
+                _('The registration request is invalid'))
 
     def clean_device(self, data):
         try:
             device = U2fDevice.get_device(
-                self.unverified_user, data['credentialId'])
+                self.unverified_user, data['id'])
         except (KeyError, U2fDevice.DoesNotExist):
             raise forms.ValidationError(_('The device is not available'))
 

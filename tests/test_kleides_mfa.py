@@ -1,9 +1,12 @@
-from base64 import urlsafe_b64decode
+from json import dumps, loads
 
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory
 
 import pytest
+
+from fido2.utils import websafe_decode
+from fido2.webauthn import CredentialCreationOptions, CredentialRequestOptions
 
 from kleides_mfa.registry import registry
 
@@ -14,22 +17,38 @@ from otp_u2f.views import AuthenticateChallengeView, RegisterChallengeView
 
 from .factories import U2fDeviceFactory, UserFactory
 
-AUTH_CREDENTIAL = 'n8ZklynFZSmYNrICld-ShxDR64QVrov2FEmy-PaHVtVE_WCj1HpLfPMgdDBQEBK5tC7TY3U0iNGTDiWWfxLylg=='  # noqa
-AUTH_PUBLIC_KEY = 'pQECAyYgASFYIKL35NsyHSsIXBqC2upUvILPoOzkuAPc2x1AT7Mkvm0fIlggJVbR-teZTDVVL7NMRLob3gZmnz0hzloFXHzOukIWIF8='  # noqa
+AUTH_CREDENTIAL = 'n8ZklynFZSmYNrICld-ShxDR64QVrov2FEmy-PaHVtVE_WCj1HpLfPMgdDBQEBK5tC7TY3U0iNGTDiWWfxLylg'  # noqa
+AUTH_PUBLIC_KEY = 'pQECAyYgASFYIKL35NsyHSsIXBqC2upUvILPoOzkuAPc2x1AT7Mkvm0fIlggJVbR-teZTDVVL7NMRLob3gZmnz0hzloFXHzOukIWIF8'  # noqa
 AUTH_STATE = {
     'challenge': 'bnRQVde1p9L_W70ll7_HOxY3WMRME57IIVJURPr16Sk',
     'user_verification': None,
 }
-AUTH_DATA = {'otp_token': 'pGlzaWduYXR1cmVYSDBGAiEAjJz5c08jnc4kxvA1mCtd_oUfejhqbpKvp69q1CU6gqICIQDE8HZY1kwAaBOAm_WdhtLH0WUB-rd6FcDIEX477ddhQmxjcmVkZW50aWFsSWRYQJ_GZJcpxWUpmDayApXfkocQ0euEFa6L9hRJsvj2h1bVRP1go9R6S3zzIHQwUBASubQu02N1NIjRkw4lln8S8pZuY2xpZW50RGF0YUpTT05YknsidHlwZSI6IndlYmF1dGhuLmdldCIsImNoYWxsZW5nZSI6ImJuUlFWZGUxcDlMX1c3MGxsN19IT3hZM1dNUk1FNTdJSVZKVVJQcjE2U2siLCJvcmlnaW4iOiJodHRwczovL2xvY2FsaG9zdC5vc3NvLm5pbmphOjUwMDAiLCJjcm9zc09yaWdpbiI6ZmFsc2V9cWF1dGhlbnRpY2F0b3JEYXRhWCUSXIrubSsKmsf2hd4Z9cy0vPwqgMw1u7Eoq5rF5711UQEAAAAE'}  # noqa
+AUTH_DATA = {'otp_token': dumps({
+    'id': AUTH_CREDENTIAL,
+    'rawId': AUTH_CREDENTIAL,
+    'response': {
+        'signature': 'MEYCIQCMnPlzTyOdziTG8DWYK13-hR96OGpukq-nr2rUJTqCogIhAMTwdljWTABoE4Cb9Z2G0sfRZQH6t3oVwMgRfjvt12FC',  # noqa
+        'credentialId': 'n8ZklynFZSmYNrICld-ShxDR64QVrov2FEmy-PaHVtVE_WCj1HpLfPMgdDBQEBK5tC7TY3U0iNGTDiWWfxLylg',  # noqa
+        'clientDataJSON': 'eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiYm5SUVZkZTFwOUxfVzcwbGw3X0hPeFkzV01STUU1N0lJVkpVUlByMTZTayIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Lm9zc28ubmluamE6NTAwMCIsImNyb3NzT3JpZ2luIjpmYWxzZX0',  # noqa
+        'authenticatorData': 'ElyK7m0rCprH9oXeGfXMtLz8KoDMNbuxKKuaxee9dVEBAAAABA',  # noqa
+    },
+})}
 
 
-REG_CREDENTIAL = 'WwyEN7OnJb6KhQS_NDn4oGbiVPSuIxmKwo-77r_8nG2BKhoyQlYvuG3uS8Wa688Yi_tZNFG7mXhRaC3lUtWCnw=='  # noqa
-REG_PUBLIC_KEY = 'pQECAyYgASFYIGX54GU6pZBsdbVEw6B7sGCrtKUaHmu62JTMBLd_U64_IlggERQvKwWtfZX8mvREWzv1mrTh2tsLvHlcCCH4247nZpM='  # noqa
+REG_CREDENTIAL = 'WwyEN7OnJb6KhQS_NDn4oGbiVPSuIxmKwo-77r_8nG2BKhoyQlYvuG3uS8Wa688Yi_tZNFG7mXhRaC3lUtWCnw'  # noqa
+REG_PUBLIC_KEY = 'pQECAyYgASFYIGX54GU6pZBsdbVEw6B7sGCrtKUaHmu62JTMBLd_U64_IlggERQvKwWtfZX8mvREWzv1mrTh2tsLvHlcCCH4247nZpM'  # noqa
 REG_STATE = {
     'challenge': 'Mjl7qc7IRNrjUgTssfOdCm0Uz4u_94de0b-feXDAp-U',
     'user_verification': 'discouraged',
 }
-REG_DATA = {'otp_token': 'om5jbGllbnREYXRhSlNPTliVeyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiTWpsN3FjN0lSTnJqVWdUc3NmT2RDbTBVejR1Xzk0ZGUwYi1mZVhEQXAtVSIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Lm9zc28ubmluamE6NTAwMCIsImNyb3NzT3JpZ2luIjpmYWxzZX1xYXR0ZXN0YXRpb25PYmplY3RY4qNjZm10ZG5vbmVnYXR0U3RtdKBoYXV0aERhdGFYxBJciu5tKwqax_aF3hn1zLS8_CqAzDW7sSirmsXnvXVRQQAAAAAAAAAAAAAAAAAAAAAAAAAAAEBbDIQ3s6clvoqFBL80OfigZuJU9K4jGYrCj7vuv_ycbYEqGjJCVi-4be5LxZrrzxiL-1k0UbuZeFFoLeVS1YKfpQECAyYgASFYIGX54GU6pZBsdbVEw6B7sGCrtKUaHmu62JTMBLd_U64_IlggERQvKwWtfZX8mvREWzv1mrTh2tsLvHlcCCH4247nZpM='}  # noqa
+REG_DATA = {'otp_token': dumps({
+    'id': REG_CREDENTIAL,
+    'rawId': REG_CREDENTIAL,
+    'response': {
+        'clientDataJSON': 'eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiTWpsN3FjN0lSTnJqVWdUc3NmT2RDbTBVejR1Xzk0ZGUwYi1mZVhEQXAtVSIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Lm9zc28ubmluamE6NTAwMCIsImNyb3NzT3JpZ2luIjpmYWxzZX0',  # noqa
+        'attestationObject': 'o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEElyK7m0rCprH9oXeGfXMtLz8KoDMNbuxKKuaxee9dVFBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQFsMhDezpyW-ioUEvzQ5-KBm4lT0riMZisKPu-6__JxtgSoaMkJWL7ht7kvFmuvPGIv7WTRRu5l4UWgt5VLVgp-lAQIDJiABIVggZfngZTqlkGx1tUTDoHuwYKu0pRoea7rYlMwEt39Trj8iWCARFC8rBa19lfya9ERbO_WatOHa2wu8eVwIIfjbjudmkw',  # noqa
+    },
+})}
 
 
 @pytest.fixture
@@ -51,7 +70,7 @@ def test_plugin():
 
 
 @pytest.mark.django_db()
-def test_authenticate_challenge_view(rfactory, webauthn):
+def test_authenticate_challenge_view(rfactory):
     request = rfactory.post('/u2f/auth/challenge/')
     request.session = {}
     view = AuthenticateChallengeView()
@@ -59,28 +78,28 @@ def test_authenticate_challenge_view(rfactory, webauthn):
     view.unverified_user = UserFactory()
     response = view.post(request)
     assert response.status_code == 200
-    challenge = webauthn.decode(response.content + b'===')
+    challenge = CredentialRequestOptions.from_dict(loads(response.content))
     state = request.session[U2F_AUTHENTICATION_KEY]
     key = challenge['publicKey']
     assert key['rpId'] == 'localhost.osso.ninja'
-    assert key['challenge'] == urlsafe_b64decode(state['challenge'] + '===')
+    assert key['challenge'] == state['challenge']
     assert key['extensions'] == {'appid': 'http://localhost.osso.ninja'}
 
 
 @pytest.mark.django_db()
-def test_register_challenge_view(rfactory, webauthn):
+def test_register_challenge_view(rfactory):
     request = rfactory.post('/u2f/register/challenge/')
     request.session = {}
     request.user = UserFactory()
     response = RegisterChallengeView.as_view()(request)
     assert response.status_code == 200
-    challenge = webauthn.decode(response.content + b'===')
+    challenge = CredentialCreationOptions.from_dict(loads(response.content))
     state = request.session[U2F_REGISTRATION_KEY]
     key = challenge['publicKey']
     assert key['rp']['id'] == 'localhost.osso.ninja'
-    assert key['challenge'] == urlsafe_b64decode(state['challenge'] + '===')
+    assert key['challenge'] == state['challenge']
     assert key['extensions'] == {'appidExclude': 'http://localhost.osso.ninja'}
-    assert key['user']['id'] == str(request.user.pk).encode()
+    assert websafe_decode(key['user']['id']) == str(request.user.pk).encode()
     assert key['user']['name'] == request.user.username
 
 

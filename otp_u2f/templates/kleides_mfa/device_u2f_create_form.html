@@ -4,7 +4,6 @@
 
 {% block extra_js %}{{ block.super }}
 <script src="{% static 'js/base64url-arraybuffer.js' %}"></script>
-<script src="{% static 'js/cbor.js' %}"></script>
 <script type="text/javascript">
 jQuery(function ($) {
     var form = $('#kleides-mfa-form').on('submit', register_start);
@@ -20,15 +19,23 @@ jQuery(function ($) {
             method: 'POST',
             headers: {'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()}
         }).then(function (response) {
-            if (response.ok) return response.text();
+            if (response.ok) return response.json();
             throw new Error('Failed to get registration challenge');
-        }).then(B64_AB.decode).then(CBOR.decode).then(function (options) {
+        }).then(function (options) {
+            // Binary webauthn fields are websafe-base64 encoded.
+            if (typeof options.publicKey.challenge === 'string') {
+                options.publicKey.challenge = B64_AB.decode(options.publicKey.challenge);
+            }
+            options.publicKey.excludeCredentials = options.publicKey.excludeCredentials.map(cred => ({
+                ...cred,
+                id: typeof cred.id === 'string' ? B64_AB.decode(cred.id) : cred.id
+            }));
+            if (typeof options.publicKey.user.id === 'string') {
+                options.publicKey.user.id = B64_AB.decode(options.publicKey.user.id);
+            }
             return navigator.credentials.create(options);
         }).then(function (attestation) {
-            $('#id_otp_token').val(B64_AB.encode(CBOR.encode({
-              'attestationObject': new Uint8Array(attestation.response.attestationObject),
-              'clientDataJSON': new Uint8Array(attestation.response.clientDataJSON)
-            })));
+            $('#id_otp_token').val(JSON.stringify(attestation));
             form.off('submit').submit();
         }).catch(function (error) {
             $('#u2f-registration-error').show();
