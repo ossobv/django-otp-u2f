@@ -2,6 +2,19 @@
 History
 =======
 
+
+0.4.0 (2026-08-13)
+------------------
+
+* Update to fido2-2.2.1.
+* Use json serialization with websafe base64 for binary fields.
+* Keep U2F authentication fallback.
+* Switch to pyproject with dev extras.
+* Bump python/django to supported releases.
+* Add uv.lock for reproducible development environments.
+* Rename to "Security Key" to match industry naming.
+
+
 0.3.3 (2025-01-27)
 ------------------
 
