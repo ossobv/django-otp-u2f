@@ -122,8 +122,8 @@ class U2fDevice(ThrottlingMixin, Device):
             )
             self.refresh_from_db()
             raise DeviceClonedError(
-                'Device appears to be cloned, expected counter > {} but got '
-                '{} instead. The device {} has been disabled.'.format(
+                'Security Key appears to be cloned, expected counter > {} but '
+                'got {} instead. The device {} has been disabled.'.format(
                     self.counter, counter, self.persistent_id))
         self.refresh_from_db()
 

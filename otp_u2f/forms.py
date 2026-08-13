@@ -32,7 +32,7 @@ class U2fDeviceCreateForm(DeviceCreateForm):
                 self._state, data)
         except Exception as e:
             raise forms.ValidationError(
-                _('Device registration failure (reason: {})').format(e))
+                _('Security Key registration failure (reason: {})').format(e))
         finally:
             if U2F_REGISTRATION_KEY in self.request.session:  # noqa: E501; pragma: no cover
                 del self.request.session[U2F_REGISTRATION_KEY]
@@ -89,13 +89,15 @@ class U2fVerifyForm(BaseVerifyForm):
         except ValueError as e:
             self.device.increment_failure_counter()
             raise forms.ValidationError(
-                _('Device authentication failure (reason: {})').format(e))
+                _('Security Key authentication failure (reason: {})'
+                  ).format(e))
 
         try:
             self.device.update_usage_counter(authenticator.counter)
         except DeviceClonedError as e:
             raise forms.ValidationError(
-                _('Device authentication failure (reason: {})').format(e))
+                _('Security Key authentication failure (reason: {})'
+                  ).format(e))
 
     def clean_input(self):
         if self._state is None:
@@ -119,9 +121,9 @@ class U2fVerifyForm(BaseVerifyForm):
             device = U2fDevice.get_device(
                 self.unverified_user, data['id'])
         except (KeyError, U2fDevice.DoesNotExist):
-            raise forms.ValidationError(_('The device is not available'))
+            raise forms.ValidationError(_('The Security Key is not available'))
 
         if not device.verify_is_allowed()[0]:
-            raise forms.ValidationError(_('The device is not available'))
+            raise forms.ValidationError(_('The Security Key is not available'))
 
         return device

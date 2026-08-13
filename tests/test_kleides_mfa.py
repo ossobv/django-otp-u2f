@@ -145,7 +145,7 @@ def test_register_form_failure(rfactory):
     request.user = user
     form = U2fDeviceCreateForm(data=REG_DATA, plugin=plugin, request=request)
     assert not form.is_valid()
-    assert 'Device registration failure (reason: Invalid origin in CollectedClientData.)' in form.errors['__all__']  # noqa
+    assert 'Security Key registration failure (reason: Invalid origin in CollectedClientData.)' in form.errors['__all__']  # noqa
 
 
 @pytest.mark.django_db()
@@ -209,4 +209,4 @@ def test_authenticate_form_failure(rfactory, settings):
         plugin=plugin, request=request)
     assert not form.is_valid()
     assert not form.device.confirmed
-    assert f'Device authentication failure (reason: Device appears to be cloned, expected counter > 5 but got 4 instead. The device otp_u2f.u2fdevice/{device.pk} has been disabled.)' in form.errors['__all__']  # noqa
+    assert f'Security Key authentication failure (reason: Security Key appears to be cloned, expected counter > 5 but got 4 instead. The device otp_u2f.u2fdevice/{device.pk} has been disabled.)' in form.errors['__all__']  # noqa

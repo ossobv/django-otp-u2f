@@ -54,23 +54,23 @@ jQuery(function ($) {
 
 {% block form_description %}
 <div id='u2f-registration-error' class='alert alert-danger' style='display: none;'>
-{% trans 'Unable to register U2F device. Please try again.' %}
+{% trans 'Unable to register Security Key. Please try again.' %}
 </div>
 <div id='u2f-timeout' class='alert alert-danger' style='display: none;'>
-{% trans 'Timeout while waiting for U2F response. Please try again.' %}
+{% trans 'Timeout while waiting for Security Key response. Please try again.' %}
 </div>
 
 <div id='u2f-already-registered' class='alert alert-warning' style='display: none;'>
-{% trans 'This U2F device is already registered for this account.' %}
+{% trans 'This Security Key is already registered for this account.' %}
 </div>
 
 <div id='u2f-support-warning' style='display: none;'>
 <div class='alert alert-danger'>
-{% trans 'You must be using a compatible browser to use a U2F security key.' %}
+{% trans 'You must be using a compatible browser to use a Security Key.' %}
 </div>
 <p>
 {% blocktrans %}
-The following browsers currently support the use of web authentication security keys:
+The following browsers currently support the use of web authentication Security Keys:
 <ul>
 <li>Firefox, version 60 and later.</li>
 <li>Chrome, version 67 and later.</li>
@@ -83,6 +83,6 @@ The following browsers currently support the use of web authentication security 
 </div>
 
 <p>
-{% trans 'Connect your U2F device and press register to add it to your account.' %}
+{% trans 'Connect your Security Key and press register to add it to your account.' %}
 </p>
 {% endblock form_description %}
