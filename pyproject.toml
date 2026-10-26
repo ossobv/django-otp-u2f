@@ -31,7 +31,7 @@ classifiers = [
     "Topic :: System :: Systems Administration :: Authentication/Directory"
 ]
 dependencies = [
-    "django-otp~=1.7.0",
+    "django-otp~=1.7.5",
     "fido2~=2.2.1",
 ]
 dynamic = ["version"]
